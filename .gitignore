@@ -4,3 +4,8 @@ ft
 output.*
 test.csv
 table_out.csv
+build/
+dist/
+test.*
+test_async.*
+data/

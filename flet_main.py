@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 import flet as ft
 import pandas as pd
+from dataclasses import dataclass, asdict
+import yaml
+import asyncio
+from threading import Thread
 #import uuid
 
 
@@ -199,54 +203,190 @@ class CustomDataView(DataControl):
         data.iloc[row,col] = new_data
         self.update_data(data)
         
+
+@dataclass
+class Catalog:
+    brand: str = "" # Schwalbe
+    product_type: str = "" # Reifen
+    version_key: str = "" # "VERSION"
+    version_types: list[str] = list # ["SCHWALBE PROTECTION", "ROLLING", "ROAD GRIP", ...]
+    attribute_types: list[str] = list # ["DIAGMETER","ETRTO","VERSION",...]
+    
+    def load(path):
+        print("loading "+path)
+        with open(path, "r+") as file:
+            c = yaml.safe_load(file)
+            c = Catalog(**c)
+            return c
+
+    def save(self,path):
+        with open(path,"w+") as file:
+            yaml.safe_dump(asdict(self),file)
+    
+@dataclass
+class ProducSeries:
+    name: str = "" # SUPER MOTO-X
+    variant: str = "" # Performance Line, Drahtreifen - HS 439
+    product_category: str = "" # URBAN
+    versions: dict = dict # DD,Gr -> Rolling->3, RoadGrip->5, ..., DD, RA -> Rolling->4, RoadGrip->4, ...
+    attributes: pd.DataFrame = pd.DataFrame # ETRTO:, SIZE:, COLOR:, BAR:, PSI:, ...
+    
+class EditableRow(DataControl):
+    
+    def __init__(self, data, label=None):
+        super().__init__(data)
+        self.label = label
+    
+    def build_widget(self) -> ft.UserControl:
+        data = self.get_data()
+        #print(f"data is {data}")
+        self.input = ft.TextField(value="",label="New Entry",autofocus=True,on_submit=self.close_dlg)
+        self.dlg_modal = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Enter Name"),
+            content=self.input,
+            actions=[
+                ft.TextButton("Yes", on_click=self.close_dlg),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+
+        listview = ft.Row(controls=[ft.Container(ft.Text(vers),bgcolor=ft.colors.BLACK12,padding=ft.padding.all(5),border_radius=5) for vers in data])
+        editrow = ft.Row([ft.Container(listview,padding=ft.padding.all(15) ,border=ft.border.all(1,color="grey"),height=75,expand=True,border_radius=5), ft.IconButton(ft.icons.ADD,on_click=self.open_dlg),ft.IconButton(ft.icons.REMOVE,on_click=self.rm_elem)])
+        
+        if self.label != None:
+            wrapper = ft.Column(controls=[ft.Text(self.label,style=ft.TextThemeStyle.HEADLINE_MEDIUM),editrow])
+            return wrapper
+        else:
+            return editrow
+        
+    
+    def open_dlg(self,e):
+        self.page.dialog = self.dlg_modal
+        self.dlg_modal.visible = True
+        self.dlg_modal.open = True
+        print(self.get_data())
+        self.page.update()
+
+    def close_dlg(self,e):
+        data = self.get_data()
+#        print(type(data))
+        data.append(self.input.value)
+        self.dlg_modal.open = False
+        self.page.update()
+        self.update_data(data)
+        
+    def rm_elem(self, e):
+        data: list = self.get_data()
+        data.pop()
+        self.update_data(data)
+        
+    
+class CatalogView(DataControl):
+    
+    def __init__(self,data, on_save = None):
+        super().__init__(data)
+        self.on_save = on_save
+    
+    def build_widget(self) -> ft.UserControl:
+        data :Catalog = self.get_data()
+        
+        self.brand = ft.TextField(value=data.brand, label="brand")
+        self.product_type = ft.TextField(value=data.product_type, label="product_type")
+        self.version_key = ft.TextField(value=data.version_key, label="version_key")
+        self.versions = EditableRow(data.version_types,label="Version Types")
+        self.attribs = EditableRow(data.attribute_types,label="Attribute Types")
+        
+        return ft.Column(controls=[ft.Text("Catalog",style=ft.TextThemeStyle.HEADLINE_LARGE),ft.Text("Basis Attributes", style=ft.TextThemeStyle.HEADLINE_MEDIUM),ft.Row([self.brand,self.product_type, self.version_key]), self.versions, self.attribs, ft.ElevatedButton("Save", on_click=self.save)])
+
+    def save(self, e):
+        catalog = Catalog(self.brand.value, self.product_type.value, self.version_key.value, self.versions.get_data(), self.attribs.get_data())
+        #y = yaml.dump(catalog,allow_unicode=True,default_flow_style=False,tags=False,explicit_start=True)
+        #c = yaml.safe_load(y)
+        #y = yaml.safe_dump(asdict(catalog))
+        #c = yaml.safe_load(y)
+        #c = Catalog(**c)
+        #print(c)
+        if self.on_save != None:
+            self.on_save(catalog)
+            
+        self.page.snack_bar = ft.SnackBar(
+            bgcolor=ft.colors.LIGHT_GREEN_600,
+            content=ft.Text("Catalog Saved")
+            )
+        self.page.snack_bar.open = True
+        self.page.update()
+        
+class RepoPicker(DataControl):
+    def __init__(self, data, on_dir_picked=None):
+        super().__init__(data)
+        self.get_directory_dialog = ft.FilePicker(on_result=self.on_pick_result)
+        self.on_dir_picked = on_dir_picked
+        
+    def get_overlay(self):
+        return self.get_directory_dialog
+        
+    def build_widget(self) -> ft.UserControl:
+        data = self.get_data()
+        repo = ft.Text(data if data != None else "<Select>")
+        return ft.Row([ft.TextButton("select directory",on_click=lambda _:self.get_directory_dialog.get_directory_path("open catalog directory")),repo])
+        #self.get_directory_dialog = ft.FilePicker(on_result=self.on_pick_result)
+        #self.page.overlay.append(self.get_directory_dialog)
+        #return ft.Row([ft.TextButton("select directory",on_click=lambda _:self.get_directory_dialog.get_directory_path("open catalog directory")),repo])
+ 
+    def on_pick_result(self, e):
+            #self.page.overlay.remove(self.get_directory_dialog)
+            #self.repo.value = e.path if e.path else "Cancelled"
+            #self.repo.update()
+            if e.path:
+                self.update_data(e.path)
+                if self.on_dir_picked != None:
+                    self.on_dir_picked(self.get_data())
+        
+class RepoView(ft.UserControl):
+    def __init__(self):
+        super().__init__()
+        self.picker = RepoPicker(None,on_dir_picked=self.on_select_repo)
+        
+    def build(self):
+        self.cv = CatalogView(Catalog(version_types=[],attribute_types=[]), on_save=lambda c: c.save(repo_path+"/catalog.yaml"))
+        return ft.Column([self.picker, self.cv])
+
+    def get_overlay(self):
+        return self.picker.get_overlay()
+
+    def on_select_repo(self, path):
+        global repo_path
+        repo_path = path
+        self.cv.update_data(Catalog.load(repo_path+"/catalog.yaml"))
+        
+repo_path = None
+
+
  
 def main(page: ft.Page):
 
-
+    print("starting app")
+    page.title = "BikeIdent PDF Catalog Extractor"
     page.scroll = "ALWAYS"
 
-    def on_keyboard(e: ft.KeyboardEvent):
-        print(e.key)
-        return False
-        
-    page.on_keyboard_event = on_keyboard
-
-
-    t = ft.Text(value="Hello, world", color="green")
-    page.controls.append(t)
-
-    tt = ft.Text("A")
-
-    page.add(ft.Row(controls=[
-        tt,
-        ft.Text("B"),
-        ft.Text("C"),
-    ]
-    ))
-    
-    page.add(Test2("old data"))
-    page.add(Test2("older data"))
-    
-    page.add(CustomDataView(df))
-
-    ev = ft.Ref[EditableDataView(df)]()
-
-    def button_clicked(e):
-        page.add(ft.Text(f"Clicked! {df.columns}\n{ev.df}"))
-        ev.current.build_rows()
-        ev.current.build()
-        ev.current.df = df
-        tt.value = "ASDF"
+    rv = RepoView()
+    page.overlay.append(rv.get_overlay())
+    tv = ft.Text("tab2")    
+    tbs = ft.Tabs(selected_index=0, tabs=[ft.Tab(text="Catalog"), ft.Tab(text="Entries")])
+    tbs_body = ft.Container()
+    def tabs_changed(e :ft.ControlEvent):
+        print("tabs changed "+str(tbs.selected_index))
+        if tbs.selected_index == 0:
+            tbs_body.content = rv
+        if tbs.selected_index == 1:
+            tbs_body.content = tv
         page.update()
+    tbs.on_change = tabs_changed
 
-    page.add(ft.ElevatedButton(
-        text="Click Me",
-        on_click=button_clicked,
-        autofocus=False
-    ))
-
-    #page.add(ev)
-
+    page.add(tbs)
+    page.add(tbs_body)
+        
     page.update()
 
 
