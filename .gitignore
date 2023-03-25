@@ -1,0 +1,6 @@
+venv
+__pycache__
+ft
+output.*
+test.csv
+table_out.csv
