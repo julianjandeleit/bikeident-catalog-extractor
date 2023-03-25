@@ -152,13 +152,17 @@ class CustomDataView(DataControl):
             cells = []
             for c in range(data.shape[1]):
                 cells.append(ft.DataCell(
-                    CustomCell(self.df.iloc[r, c], r, c, self),
+                    CustomCell(data.iloc[r, c], r, c, self),
                     show_edit_icon=False,
-                    on_tap=lambda e: (e.control.row, e.control.col)
+                    on_tap=lambda e: self.on_tap((e.control._DataCell__content.row, e.control._DataCell__content.col))
+#                    on_tap=lambda e: e.control._DataCell__content.open_dlg()
                 ))
             row = ft.DataRow(cells=cells)
             rows.append(row)
-        self.rows = rows
+        return ft.DataTable(
+            columns=[ft.DataColumn(ft.Text(c)) for c in data.columns],
+            rows=rows,
+        )
         
     def on_tap(self, pos):
         data = self.get_data()
