@@ -152,9 +152,9 @@ class EditCell(DataControl):
     def build_widget(self) -> ft.UserControl:
         data, row, col = self.get_data()
         if self.isEditing:
-            return ft.TextField(value=data,text_size=15,border=None,text_style=ft.TextStyle(size=7), content_padding=0,on_submit=self.on_submit)
+            return ft.TextField(value=data,filled=True,border=None,text_style=ft.TextStyle(size=15),autofocus=True,content_padding=0,on_submit=self.on_submit)
         else:
-            return ft.GestureDetector(content=ft.Text(data), on_tap=lambda e: self.on_tap())
+            return ft.GestureDetector(content=ft.Text(data), on_tap=lambda e: self.focus())
         
     def on_submit(self,e):
         new_val = e.control.value
@@ -164,12 +164,12 @@ class EditCell(DataControl):
         self.update_data((data, row, col))
         if self.on_data_changed != None:
             self.on_data_changed(row, col, new_val)
-    def on_tap(self):
+    def focus(self):
         self.isEditing = True
         self.update_data(self.get_data())
         
 class CustomDataView(DataControl):
-    def build_widget(self) -> ft.UserControl:
+    def build_widget(self) -> ft.UserControl:        
         data : pd.DataFrame = self.get_data()
         rows = []
         for r in range(data.shape[0]):
@@ -178,27 +178,39 @@ class CustomDataView(DataControl):
                 cells.append(ft.DataCell(
                     EditCell((data.iloc[r, c], r, c), on_data_changed=self.cell_changed),
                     show_edit_icon=False,
-#                    on_tap=lambda e: self.on_tap((e.control._DataCell__content.get_data()[1], e.control._DataCell__content.get_data()[2]))
-#                    on_tap=lambda e: e.control._DataCell__content.open_dlg()
                 ))
             row = ft.DataRow(cells=cells)
             rows.append(row)
-        return ft.DataTable(
-            columns=[ft.DataColumn(ft.Text(c)) for c in data.columns],
+        return ft.Row(
+            scroll="ALWAYS",
+            controls=[ft.DataTable(
+            columns=[ft.DataColumn(ft.Row(alignment=ft.MainAxisAlignment.START,vertical_alignment=ft.CrossAxisAlignment.START,controls=[EditCell((c, None,i),on_data_changed=self.col_changed)])) for i,c in enumerate(data.columns)],
             rows=rows,
-        )
+        )])
+        
+    def col_changed(self, _row, col, new_data):
+        data = self.get_data()
+        data.columns.values[col] = new_data
+        self.update_data(data)
+        print(self.get_data())
         
     def cell_changed(self,row, col, new_data):
         data = self.get_data()
         data.iloc[row,col] = new_data
         self.update_data(data)
-        print(self.get_data().head())
         
  
 def main(page: ft.Page):
 
 
     page.scroll = "ALWAYS"
+
+    def on_keyboard(e: ft.KeyboardEvent):
+        print(e.key)
+        return False
+        
+    page.on_keyboard_event = on_keyboard
+
 
     t = ft.Text(value="Hello, world", color="green")
     page.controls.append(t)
@@ -229,7 +241,8 @@ def main(page: ft.Page):
 
     page.add(ft.ElevatedButton(
         text="Click Me",
-        on_click=button_clicked
+        on_click=button_clicked,
+        autofocus=False
     ))
 
     #page.add(ev)
