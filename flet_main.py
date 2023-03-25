@@ -109,7 +109,6 @@ class CustomCell(ft.UserControl):
         dlg.open = True
         self.page.update()
 
-
 class EditableDataView(ft.UserControl):
     def __init__(self, data: pd.DataFrame):
         super().__init__()
@@ -144,6 +143,31 @@ class EditableDataView(ft.UserControl):
             rows=rws,
         )
         
+class EditCell(DataControl):
+    def __init__(self, data,on_data_changed = None):
+        super().__init__(data)
+        self.isEditing = False 
+        self.on_data_changed = on_data_changed
+        
+    def build_widget(self) -> ft.UserControl:
+        data, row, col = self.get_data()
+        if self.isEditing:
+            return ft.TextField(value=data,text_size=15,border=None,text_style=ft.TextStyle(size=7), content_padding=0,on_submit=self.on_submit)
+        else:
+            return ft.GestureDetector(content=ft.Text(data), on_tap=lambda e: self.on_tap())
+        
+    def on_submit(self,e):
+        new_val = e.control.value
+        self.isEditing = False
+        data, row, col = self.get_data()
+        data = new_val
+        self.update_data((data, row, col))
+        if self.on_data_changed != None:
+            self.on_data_changed(row, col, new_val)
+    def on_tap(self):
+        self.isEditing = True
+        self.update_data(self.get_data())
+        
 class CustomDataView(DataControl):
     def build_widget(self) -> ft.UserControl:
         data : pd.DataFrame = self.get_data()
@@ -152,9 +176,9 @@ class CustomDataView(DataControl):
             cells = []
             for c in range(data.shape[1]):
                 cells.append(ft.DataCell(
-                    CustomCell(data.iloc[r, c], r, c, self),
+                    EditCell((data.iloc[r, c], r, c), on_data_changed=self.cell_changed),
                     show_edit_icon=False,
-                    on_tap=lambda e: self.on_tap((e.control._DataCell__content.row, e.control._DataCell__content.col))
+#                    on_tap=lambda e: self.on_tap((e.control._DataCell__content.get_data()[1], e.control._DataCell__content.get_data()[2]))
 #                    on_tap=lambda e: e.control._DataCell__content.open_dlg()
                 ))
             row = ft.DataRow(cells=cells)
@@ -164,10 +188,11 @@ class CustomDataView(DataControl):
             rows=rows,
         )
         
-    def on_tap(self, pos):
+    def cell_changed(self,row, col, new_data):
         data = self.get_data()
-        data.iloc[pos[0],pos[1]] = "CHANGED"
+        data.iloc[row,col] = new_data
         self.update_data(data)
+        print(self.get_data().head())
         
  
 def main(page: ft.Page):
