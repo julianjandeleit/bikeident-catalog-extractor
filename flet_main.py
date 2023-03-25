@@ -30,7 +30,7 @@ class DataControl(ft.UserControl):
         self.update()
         
     def build_widget(self) -> ft.UserControl:
-        pass
+        return ft.Container() # override to change to your needs
         
     def _build_widget(self):
         widget = self.build_widget()
@@ -143,6 +143,28 @@ class EditableDataView(ft.UserControl):
             columns=[ft.DataColumn(ft.Text(c)) for c in df.columns],
             rows=rws,
         )
+        
+class CustomDataView(DataControl):
+    def build_widget(self) -> ft.UserControl:
+        data : pd.DataFrame = self.get_data()
+        rows = []
+        for r in range(data.shape[0]):
+            cells = []
+            for c in range(data.shape[1]):
+                cells.append(ft.DataCell(
+                    CustomCell(self.df.iloc[r, c], r, c, self),
+                    show_edit_icon=False,
+                    on_tap=lambda e: (e.control.row, e.control.col)
+                ))
+            row = ft.DataRow(cells=cells)
+            rows.append(row)
+        self.rows = rows
+        
+    def on_tap(self, pos):
+        data = self.get_data()
+        data.iloc[pos[0],pos[1]] = "CHANGED"
+        self.update_data(data)
+        
  
 def main(page: ft.Page):
 
@@ -163,6 +185,8 @@ def main(page: ft.Page):
     
     page.add(Test2("old data"))
     page.add(Test2("older data"))
+    
+    page.add(CustomDataView(df))
 
     ev = ft.Ref[EditableDataView(df)]()
 
