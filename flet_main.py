@@ -3,8 +3,9 @@ import flet as ft
 import pandas as pd
 from dataclasses import dataclass, asdict
 import yaml
-import asyncio
+import tabula
 from threading import Thread
+import ast
 #import uuid
 
 
@@ -396,6 +397,30 @@ class RepoView(ft.UserControl):
         self.cv.update_data(c)
         if self.on_catalog_changed != None:
             self.on_catalog_changed(c)
+
+class TableExtractor(ft.UserControl):
+    def __init__(self, path, on_select_data = None):
+        super().__init__()
+        self.path = path
+        self.on_select_data = on_select_data
+
+    def on_choose(self, df):
+        self.dlg.open = False
+        self.page.update()
+        if self.on_select_data != None:
+            self.on_select_data(df)
+
+    def on_read(self,pages):
+        pages = ast.literal_eval(pages)
+        dfs = tabula.read_pdf(self.path,pages=pages,pandas_options={"header":None})
+        self.dlg = ft.AlertDialog(title=ft.Text("select table"),content=ft.Column([ft.Container(ft.TextButton(f"{df}", data=df,on_click=lambda e: self.on_choose(e.control.data)), padding=ft.padding.only(bottom=25)) for df in dfs], scroll="ALWAYS"),visible=True)
+        self.page.dialog = self.dlg
+        self.dlg.open = True
+        self.page.update()
+    
+    def build(self):
+        self.number = ft.TextField(label="Enter Page Number",tooltip="needs to be a number",hint_text="22 or [22, 23]", width=150, on_blur=lambda e: self.on_read(e.control.value))
+        return self.number
         
 class ProductView(DataControl):
     def __init__(self, data: ProducSeries, variant_types: list[str]):
@@ -426,15 +451,21 @@ class ProductView(DataControl):
             self.variant_entries.update()
 
     def build_widget(self) -> ft.UserControl:
-        print("bulding widgin")
         data: ProducSeries = self.get_data()
         self.name = ft.TextField(value=data.name, label="name",on_blur=lambda e: self.store_attr("name",e.control.value),col=4)
         self.finish = ft.TextField(value=data.variant, label="finish", on_blur=lambda e:self.store_attr("variant",e.control.value),col=4)
         self.category = ft.TextField(value=data.product_category, label="product class", on_blur=lambda e:self.store_attr("product_category",e.control.value),col=4)
         self.variants = EditableRow(self.variants_data,label="variants", on_changed=lambda d: self.store_variants(d))
         self.variant_entries = ft.Column([])
-        self.store_variants(self.variants_data,do_update=False)
-        return ft.Column([ft.Text("Product",style=ft.TextThemeStyle.HEADLINE_MEDIUM),ft.ResponsiveRow([self.name,self.category,self.finish,self.variants]), self.variant_entries])
+        self.store_variants(self.variants_data,do_update=False) # build entries for initial data
+
+        path = "C:/Users/Julian/Downloads/Schwalbe Katalog 2022.pdf"
+        def onDF(df):
+            self.primary_attribs.update_data(df)
+            self.store_attr("attributes", df)
+        self.table_selector = TableExtractor(path, on_select_data=lambda df: onDF(df))
+        self.primary_attribs = CustomDataView(data.attributes)
+        return ft.Column([ft.Text("Product",style=ft.TextThemeStyle.HEADLINE_MEDIUM),ft.ResponsiveRow([self.name,self.category,self.finish,self.variants]), self.variant_entries, self.table_selector,self.primary_attribs])
 
         
 repo_path = None
@@ -445,6 +476,10 @@ def main(page: ft.Page):
 
     print("starting app")
     page.title = "BikeIdent PDF Catalog Extractor"
+    page.window_width = 1080
+    page.window_height = 720
+    page.window_min_height = 480
+    page.window_min_width = 640
     page.scroll = "ALWAYS"
 
     repoView = RepoView()
