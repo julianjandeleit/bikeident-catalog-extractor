@@ -1,8 +1,9 @@
 #%%
 import tabula
 import pandas as pd
-import pdftotext
-path_pdf = "/home/julian/Downloads/Schwalbe Katalog 2022.pdf"
+#import pdftotext
+#path_pdf = "/home/julian/Downloads/Schwalbe Katalog 2022.pdf"
+path_pdf = "C:/Users/Julian/Downloads/Schwalbe Katalog 2022.pdf"
 #%%
 dfs = tabula.read_pdf(path_pdf,pages=[22,23],pandas_options={"header":None})
 len(dfs)
