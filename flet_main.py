@@ -20,19 +20,33 @@ df = df.rename(columns={"0":"A"})
 dfs = [df]
 
 class DataControl(ft.UserControl):
-    def __init__(self, data):
+    def __init__(self, data, on_changed = None):
         super().__init__()
         self._data = data
         self._widget = ft.Container()
+        self.on_changed = on_changed
         
         
     def get_data(self):
         return self._data
         
     def update_data(self, data):
+        """ Update data and rebuild widget """
         self._data = data
+        if self.on_changed != None:
+            self.on_changed(self.get_data())
         self.update()
         
+    def store_attr(self,attr,value):
+        """ Store attribute of data without rebuilding widget. (Necessary for storing input between external rebuild) """
+        try:
+            setattr(self._data,attr,value)
+        except:
+            # assume is dict
+            self._data[attr] = value
+        if self.on_changed != None:
+            self.on_changed(self.get_data())
+
     def build_widget(self) -> ft.UserControl:
         return ft.Container() # override to change to your needs
         
@@ -233,8 +247,8 @@ class ProducSeries:
     
 class EditableRow(DataControl):
     
-    def __init__(self, data, label=None):
-        super().__init__(data)
+    def __init__(self, data, label=None,on_changed=None):
+        super().__init__(data,on_changed=on_changed)
         self.label = label
     
     def build_widget(self) -> ft.UserControl:
@@ -291,11 +305,11 @@ class CatalogView(DataControl):
     def build_widget(self) -> ft.UserControl:
         data :Catalog = self.get_data()
         
-        self.brand = ft.TextField(value=data.brand, label="brand")
-        self.product_type = ft.TextField(value=data.product_type, label="product_type")
-        self.version_key = ft.TextField(value=data.version_key, label="version_key")
-        self.versions = EditableRow(data.version_types,label="Version Types")
-        self.attribs = EditableRow(data.attribute_types,label="Attribute Types")
+        self.brand = ft.TextField(value=data.brand, label="brand",on_blur=lambda _: self.store_attr("brand",self.brand.value))
+        self.product_type = ft.TextField(value=data.product_type, label="product_type",on_blur=lambda _: self.store_attr("product_type",self.product_type.value))
+        self.version_key = ft.TextField(value=data.version_key, label="version_key",on_blur=lambda _: self.store_attr("version_key",self.version_key.value))
+        self.versions = EditableRow(data.version_types,label="Version Types",on_changed=lambda d: self.store_attr("version_types",d))
+        self.attribs = EditableRow(data.attribute_types,label="Attribute Types",on_changed=lambda d: self.store_attr("attribute_types",d))
         
         return ft.Column(controls=[ft.Text("Catalog",style=ft.TextThemeStyle.HEADLINE_LARGE),ft.Text("Basis Attributes", style=ft.TextThemeStyle.HEADLINE_MEDIUM),ft.Row([self.brand,self.product_type, self.version_key]), self.versions, self.attribs, ft.ElevatedButton("Save", on_click=self.save)])
 
@@ -328,7 +342,7 @@ class RepoPicker(DataControl):
         
     def build_widget(self) -> ft.UserControl:
         data = self.get_data()
-        repo = ft.Text(data if data != None else "<Select>")
+        repo = ft.Text(data if data != None else "Not Selected")
         return ft.Row([ft.TextButton("select directory",on_click=lambda _:self.get_directory_dialog.get_directory_path("open catalog directory")),repo])
         #self.get_directory_dialog = ft.FilePicker(on_result=self.on_pick_result)
         #self.page.overlay.append(self.get_directory_dialog)
@@ -342,23 +356,75 @@ class RepoPicker(DataControl):
                 self.update_data(e.path)
                 if self.on_dir_picked != None:
                     self.on_dir_picked(self.get_data())
+                    
+class EditStrDict(DataControl):
+    def build_widget(self) -> ft.UserControl:
+        # Assuming key is string
+        data : dict[str, str] =self.get_data()
+        self.widget = ft.Row([])
+        for key, value in data.items():
+            self.widget.controls.append(ft.Text(key),ft.TextField(value=value, label="value",on_blur=lambda e: self.store_attr(key,e.control.value)))
+        return self.widget
+            
         
 class RepoView(ft.UserControl):
     def __init__(self):
         super().__init__()
         self.picker = RepoPicker(None,on_dir_picked=self.on_select_repo)
+        self.cv = CatalogView(Catalog(version_types=[],attribute_types=[]), on_save=lambda c: c.save(repo_path+"/catalog.yaml"))
         
     def build(self):
-        self.cv = CatalogView(Catalog(version_types=[],attribute_types=[]), on_save=lambda c: c.save(repo_path+"/catalog.yaml"))
         return ft.Column([self.picker, self.cv])
 
     def get_overlay(self):
         return self.picker.get_overlay()
 
     def on_select_repo(self, path):
-        global repo_path
+        global repo_path #TODO: should provide callback which handles this to be independent from file the class is used in
         repo_path = path
         self.cv.update_data(Catalog.load(repo_path+"/catalog.yaml"))
+        
+class ProductView(DataControl):
+    def __init__(self, data: ProducSeries, variant_types: list[str]):
+        super().__init__(data)
+        self.variant_types = variant_types
+        
+    def on_variants_changed(self, d):
+            print("variants changed")
+            data :ProducSeries = self.get_data()
+            # remove key if not present anymore
+            for key in list(data.versions.keys()).copy():
+                if key not in d:
+                    data.versions.pop(key,None)
+            
+            # add key if new
+            for key in d:
+                if key not in list(data.versions.keys()):
+                    data.versions[key] = dict()
+                    
+                    # fill with necessary fields
+            #       for var in self.variant_types:
+            #            if var not in data.versions[key].keys():
+            #                data.versions[key][var] = ""
+            #print(f"data {data}")
+            self.update_data(data)
+        
+    def build_widget(self) -> ft.UserControl:
+        data: ProducSeries = self.get_data()
+        self.name = ft.TextField(value=data.name, label="name",on_blur=lambda e: self.store_attr("name",e.control.value))
+        self.finish = ft.TextField(value=data.variant, label="finish", on_blur=lambda e:self.store_attr("variant",e.control.value))
+        self.category = ft.TextField(value=data.product_category, label="product class", on_blur=lambda e:self.store_attr("product_category",e.control.value))
+                    
+        self.variants = EditableRow(list(data.versions.keys()),label="Versions", on_changed=self.on_variants_changed)
+        
+        #for key, entries in data.versions.items():
+        #    print(key, entries)
+        rows = []
+        for version, entries  in data.versions.items():
+            rows.append(ft.Row([ft.Text(version),ft.Text(f"{entries}")]))
+        self.variant_entries = ft.Column(rows)
+        return ft.Column([self.name,self.category,self.finish,self.variants,self.variant_entries])
+
         
 repo_path = None
 
@@ -370,17 +436,18 @@ def main(page: ft.Page):
     page.title = "BikeIdent PDF Catalog Extractor"
     page.scroll = "ALWAYS"
 
-    rv = RepoView()
-    page.overlay.append(rv.get_overlay())
-    tv = ft.Text("tab2")    
+    repoView = RepoView()
+    page.overlay.append(repoView.get_overlay())
+    catalog :Catalog = repoView.cv.get_data()
+    productView = ProductView(ProducSeries("","","",{}, pd.DataFrame()),catalog.version_types)    
     tbs = ft.Tabs(selected_index=0, tabs=[ft.Tab(text="Catalog"), ft.Tab(text="Entries")])
-    tbs_body = ft.Container()
+    tbs_body = ft.Container(repoView)
     def tabs_changed(e :ft.ControlEvent):
         print("tabs changed "+str(tbs.selected_index))
         if tbs.selected_index == 0:
-            tbs_body.content = rv
+            tbs_body.content = repoView
         if tbs.selected_index == 1:
-            tbs_body.content = tv
+            tbs_body.content = productView
         page.update()
     tbs.on_change = tabs_changed
 
