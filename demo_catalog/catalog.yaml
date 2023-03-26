@@ -1,0 +1,27 @@
+attribute_types:
+- DIAMETER
+- ETRTO
+- SIZE
+- VERSION
+- SEAL
+- E-BIKE
+- INDEX
+- COMPOUND
+- COLOUR
+- BAR
+- PSI
+- g
+- EPI
+- LOAD
+- ART-NO
+- "\u20AC"
+brand: Schwalbe
+product_type: Rennreifen
+version_key: VERSION
+version_types:
+- ROLLING
+- ROAD GRIP
+- OFF-ROAD-GRIP
+- PROTECTION
+- DURABILITY
+- SCHWALBE PROTECTION
