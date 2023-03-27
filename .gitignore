@@ -9,3 +9,4 @@ dist/
 test.*
 test_async.*
 data/
+*.spec

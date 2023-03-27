@@ -16,7 +16,8 @@ def load_csv(path: str):
 #    columns = [ft.DataColumn(ft.Text(name)) for name in df.columns ]
 
 
-df = load_csv("data/table_out.csv")
+#df = load_csv("data/table_out.csv")
+df = pd.DataFrame()
 df = df.rename(columns={"0":"A"})
 dfs = [df]
 
@@ -163,15 +164,16 @@ class EditableDataView(ft.UserControl):
         )
         
 class EditCell(DataControl):
-    def __init__(self, data,on_data_changed = None):
+    def __init__(self, data,on_data_changed = None, width = None):
         super().__init__(data)
         self.isEditing = False 
         self.on_data_changed = on_data_changed
+        self.edit_width = width
         
     def build_widget(self) -> ft.UserControl:
         data, row, col = self.get_data()
         if self.isEditing:
-            return ft.TextField(value=data,filled=True,border=None,text_style=ft.TextStyle(size=15),autofocus=True,content_padding=0,on_submit=self.on_submit)
+            return ft.TextField(value=data,filled=True,border=None,text_style=ft.TextStyle(size=15),width=self.edit_width,autofocus=True,content_padding=0,on_submit=self.on_submit)
         else:
             return ft.GestureDetector(content=ft.Text(data), on_tap=lambda e: self.focus())
         
@@ -203,12 +205,14 @@ class CustomDataView(DataControl):
         return ft.Row(
             scroll="ALWAYS",
             controls=[ft.DataTable(
-            columns=[ft.DataColumn(ft.Row(alignment=ft.MainAxisAlignment.START,vertical_alignment=ft.CrossAxisAlignment.START,controls=[EditCell((c, None,i),on_data_changed=self.col_changed)])) for i,c in enumerate(data.columns)],
+            columns=[ft.DataColumn(ft.Row(alignment=ft.MainAxisAlignment.START,vertical_alignment=ft.CrossAxisAlignment.START,controls=[EditCell((c, None,i),width=75,on_data_changed=self.col_changed)])) for i,c in enumerate(data.columns)],
             rows=rows,
         )])
         
     def col_changed(self, _row, col, new_data):
         data = self.get_data()
+        data.columns = data.columns.astype(str)
+        #print("column change",data.columns.dtype, col,new_data)
         data.columns.values[col] = new_data
         self.update_data(data)
         #print(self.get_data())
@@ -245,6 +249,16 @@ class ProducSeries:
     product_category: str = "" # URBAN
     versions: dict = dict # DD,Gr -> Rolling->3, RoadGrip->5, ..., DD, RA -> Rolling->4, RoadGrip->4, ...
     attributes: pd.DataFrame = pd.DataFrame # ETRTO:, SIZE:, COLOR:, BAR:, PSI:, ...
+    
+    def to_yaml(self):
+        data = asdict(self)
+        data["attributes"] = data["attributes"].to_dict()
+        return yaml.safe_dump(data)
+
+    def from_yaml(yaml_str):
+        dct = yaml.safe_load(yaml_str)
+        dct["attributes"] = pd.DataFrame.from_dict(dct["attributes"])
+        return ProducSeries(**dct)
     
 class EditableRow(DataControl):
     
@@ -411,22 +425,30 @@ class TableExtractor(ft.UserControl):
             self.on_select_data(df)
 
     def on_read(self,pages):
+        #self.page.ad.add(ft.Text(f"reading {pages}"))
         pages = ast.literal_eval(pages)
+        #self.page.add(ft.Text(f"starting tabula"))
+        #try:
         dfs = tabula.read_pdf(self.path,pages=pages,pandas_options={"header":None})
+        #except Exception as e:
+        #    self.page.add(ft.Text(f"tabular failed with {e}"))
+        self.page.add(ft.Text(f"opening result dialog"))
         self.dlg = ft.AlertDialog(title=ft.Text("select table"),content=ft.Column([ft.Container(ft.TextButton(f"{df}", data=df,on_click=lambda e: self.on_choose(e.control.data)), padding=ft.padding.only(bottom=25)) for df in dfs], scroll="ALWAYS"),visible=True)
         self.page.dialog = self.dlg
         self.dlg.open = True
         self.page.update()
     
     def build(self):
-        self.number = ft.TextField(label="Enter Page Number",tooltip="needs to be a number",hint_text="22 or [22, 23]", width=150, on_blur=lambda e: self.on_read(e.control.value))
+        self.number = ft.TextField(label="Enter Page Number",tooltip="needs to be a number",hint_text="22 or [22, 23]", width=150, on_submit=lambda e: self.on_read(e.control.value))
         return self.number
         
 class ProductView(DataControl):
-    def __init__(self, data: ProducSeries, variant_types: list[str]):
+    def __init__(self, data: ProducSeries, variant_types: list[str],attribute_types, on_save):
         super().__init__(data)
         self.variant_types = variant_types
+        self.attribute_types = attribute_types
         self.variants_data = list(data.versions.keys())
+        self.on_save = on_save
         
     def store_variants(self, d, do_update=True):
         # TODO: how to generalize this to DataControl?
@@ -450,6 +472,12 @@ class ProductView(DataControl):
         if do_update:
             self.variant_entries.update()
 
+    def store_missing_columns(self, do_update=True):
+        data :ProducSeries= self.get_data()
+        self.missing_column_names.controls = [ft.Text(name) for name in self.attribute_types if name not in data.attributes.columns]
+        if do_update:
+            self.missing_column_names.update()
+
     def build_widget(self) -> ft.UserControl:
         data: ProducSeries = self.get_data()
         self.name = ft.TextField(value=data.name, label="name",on_blur=lambda e: self.store_attr("name",e.control.value),col=4)
@@ -464,8 +492,11 @@ class ProductView(DataControl):
             self.primary_attribs.update_data(df)
             self.store_attr("attributes", df)
         self.table_selector = TableExtractor(path, on_select_data=lambda df: onDF(df))
-        self.primary_attribs = CustomDataView(data.attributes)
-        return ft.Column([ft.Text("Product",style=ft.TextThemeStyle.HEADLINE_MEDIUM),ft.ResponsiveRow([self.name,self.category,self.finish,self.variants]), self.variant_entries, self.table_selector,self.primary_attribs])
+        self.missing_column_names = ft.Row([],wrap=True)
+        self.primary_attribs = CustomDataView(data.attributes,on_changed=lambda e: self.store_missing_columns())
+        self.store_missing_columns(do_update=False)
+        self.save = ft.ElevatedButton("Save", on_click=lambda _: self.on_save(self.get_data()))
+        return ft.Column([ft.Text("Product",style=ft.TextThemeStyle.HEADLINE_MEDIUM),ft.ResponsiveRow([self.name,self.category,self.finish,self.variants]), self.variant_entries, self.table_selector,self.missing_column_names,self.primary_attribs,self.save])
 
         
 repo_path = None
@@ -475,7 +506,7 @@ repo_path = None
 def main(page: ft.Page):
 
     print("starting app")
-    page.title = "BikeIdent PDF Catalog Extractor"
+    page.title = "BikeIdent Database Editor"
     page.window_width = 1080
     page.window_height = 720
     page.window_min_height = 480
@@ -485,9 +516,16 @@ def main(page: ft.Page):
     repoView = RepoView()
     page.overlay.append(repoView.get_overlay())
     catalog :Catalog = repoView.cv.get_data()
-    productView = ProductView(ProducSeries("","","",{}, pd.DataFrame()),variant_types = catalog.version_types)
+    def on_product_save(ps: ProducSeries):
+        #ps.save(repo_path+"/products.yaml")
+        yml = ps.to_yaml()
+        print(yml)
+        print(ProducSeries.from_yaml(yml))
+
+    productView = ProductView(ProducSeries("","","",{}, pd.DataFrame()),variant_types = catalog.version_types,attribute_types=catalog.attribute_types,on_save=on_product_save)
     def on_catalog_changed(c: Catalog):
         productView.variant_types = c.version_types
+        productView.attribute_types = c.attribute_types
     repoView.on_catalog_changed = on_catalog_changed 
     tbs = ft.Tabs(selected_index=0, tabs=[ft.Tab(text="Catalog"), ft.Tab(text="Entries")])
     tbs_body = ft.Container(repoView)
