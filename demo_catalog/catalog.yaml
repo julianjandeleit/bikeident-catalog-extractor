@@ -16,8 +16,8 @@ attribute_types:
 - ART-NO
 - "\u20AC"
 brand: Schwalbe
-product_type: Rennreifen
-version_key: VERSION
+product_type: Rennradreifen
+version_key: Version
 version_types:
 - ROLLING
 - ROAD GRIP

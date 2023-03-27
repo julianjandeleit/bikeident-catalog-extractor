@@ -243,8 +243,8 @@ class Catalog:
         with open(path,"w+") as file:
             yaml.safe_dump(asdict(self),file)
     
-@dataclass
-class ProducSeries:
+@dataclass(eq=False)
+class ProductSeries:
     name: str = "" # SUPER MOTO-X
     variant: str = "" # Performance Line, Drahtreifen - HS 439
     product_category: str = "" # URBAN
@@ -259,12 +259,24 @@ class ProducSeries:
     def from_yaml(yaml_str):
         dct = yaml.safe_load(yaml_str)
         dct["attributes"] = pd.DataFrame.from_dict(dct["attributes"])
-        return ProducSeries(**dct)
+        return ProductSeries(**dct)
     
+    def to_dict(self):
+        data = asdict(self)
+        data["attributes"] = data["attributes"].to_dict()
+        return data
+    
+    def __eq__(self, __value: object) -> bool:
+        if  not isinstance(__value, ProductSeries):
+            return False
+        v :ProductSeries = __value
+        return v.name == self.name and v.variant == self.variant
+    
+
     def from_dict(dct: dict):
         dct = dct.copy()
         dct["attributes"] = pd.DataFrame.from_dict(dct["attributes"])
-        return ProducSeries(**dct)
+        return ProductSeries(**dct)
     
 class EditableRow(DataControl):
     
@@ -319,9 +331,8 @@ class EditableRow(DataControl):
     
 class CatalogView(DataControl):
     
-    def __init__(self,data, on_save = None):
+    def __init__(self,data):
         super().__init__(data)
-        self.on_save = on_save
     
     def build_widget(self) -> ft.UserControl:
         data :Catalog = self.get_data()
@@ -332,25 +343,8 @@ class CatalogView(DataControl):
         self.versions = EditableRow(data.version_types,label="Version Types",on_changed=lambda d: self.store_attr("version_types",d))
         self.attribs = EditableRow(data.attribute_types,label="Attribute Types",on_changed=lambda d: self.store_attr("attribute_types",d))
         
-        return ft.Column(controls=[ft.Text("Catalog",style=ft.TextThemeStyle.HEADLINE_LARGE),ft.Text("Basis Attributes", style=ft.TextThemeStyle.HEADLINE_MEDIUM),ft.ResponsiveRow([self.brand,self.product_type, self.version_key]), self.versions, self.attribs, ft.ElevatedButton("Save", on_click=self.save)])
+        return ft.Column(controls=[ft.Text("Catalog",style=ft.TextThemeStyle.HEADLINE_LARGE),ft.Text("Basis Attributes", style=ft.TextThemeStyle.HEADLINE_MEDIUM),ft.ResponsiveRow([self.brand,self.product_type, self.version_key]), self.versions, self.attribs])
 
-    def save(self, e):
-        catalog = Catalog(self.brand.value, self.product_type.value, self.version_key.value, self.versions.get_data(), self.attribs.get_data())
-        #y = yaml.dump(catalog,allow_unicode=True,default_flow_style=False,tags=False,explicit_start=True)
-        #c = yaml.safe_load(y)
-        #y = yaml.safe_dump(asdict(catalog))
-        #c = yaml.safe_load(y)
-        #c = Catalog(**c)
-        #print(c)
-        if self.on_save != None:
-            self.on_save(catalog)
-            
-        self.page.snack_bar = ft.SnackBar(
-            bgcolor=ft.colors.LIGHT_GREEN_600,
-            content=ft.Text("Catalog Saved")
-            )
-        self.page.snack_bar.open = True
-        self.page.update()
         
 class RepoPicker(DataControl):
     def __init__(self, data, on_dir_picked=None):
@@ -423,23 +417,38 @@ class ProductListView(DataControl):
         super().__init__(data, on_changed)
         self.on_select_product = on_select_product
 
-    def build_widget(self) -> ft.UserControl:
-        data :list[ProducSeries] = self.get_data()
+    def select(self, e):
+        self.on_select_product(e.control.data)
 
-        return ft.Column([ft.TextButton(f"{p.name} {p.variant}", data=p, on_click=lambda e: self.on_select_product(e.control.data)) for p in data]+[ft.IconButton(icon=ft.icons.ADD,on_click=lambda _: self.on_select_product(ProducSeries("","","",dict(),pd.DataFrame())))],wrap=True)
+    def remove(self,p):
+        data :list[ProductSeries] = self.get_data()
+        data.remove(p)
+        self.update_data(data)
+
+    def build_widget(self) -> ft.UserControl:
+        data :list[ProductSeries] = self.get_data()
+        def get_elem(product):
+            return ft.Row([
+                ft.IconButton(icon=ft.icons.REMOVE_CIRCLE_OUTLINE,data=product,on_click=lambda e: self.remove(e.control.data)),
+                ft.TextButton(f"{product.name} {product.variant}", data=product, on_click=self.select)])
+        return ft.Column([get_elem(p) for p in data]+[ft.IconButton(icon=ft.icons.ADD_CIRCLE_OUTLINE,on_click=lambda _: self.on_select_product(ProductSeries("","","",dict(),pd.DataFrame()))),],wrap=True)
     
+def print_exception(msg, page, e):
+    page.snack_bar = ft.SnackBar(
+        bgcolor=ft.colors.RED,
+            content=ft.Text(f"Exception {msg}\n{e}")
+            )
+    page.snack_bar.open = True
+    page.update()
 
 class RepoView(ft.UserControl):
     def __init__(self):
         super().__init__()
         self.picker = RepoPicker(None,on_dir_picked=self.on_select_repo)
         self.picker_catalog = PDFPicker(None,on_file_picked=self.on_select_catalog_file)
-        def on_save(c: Catalog):
-            c.save(repo_path+"/catalog.yaml")
-            self.on_catalog_changed(c)
 
         catalog = Catalog(version_types=[],attribute_types=[])
-        self.cv = CatalogView(catalog, on_save=on_save)
+        self.cv = CatalogView(catalog)
 
         self.tabs = ft.Tabs(selected_index=0, tabs=[ft.Tab(text="Catalog"), ft.Tab("Products"), ft.Tab(text="Entries")])
         self.tabs_body = ft.Container(self.cv)
@@ -448,32 +457,44 @@ class RepoView(ft.UserControl):
         self.products = ProductListView([], on_select_product=self.on_select_product)
         self.selected_product = None
         self.pdf_path = ""
-        self.productView = ProductView(ProducSeries("","","",{},pd.DataFrame()),variant_types = catalog.version_types,attribute_types=catalog.attribute_types,on_save=self.on_product_save,pdf_path=self.pdf_path)
+        self.productView = ProductView(ProductSeries("","","",{},pd.DataFrame()),variant_types = catalog.version_types,attribute_types=catalog.attribute_types,pdf_path=self.pdf_path, on_changed=self.product_changed)
     
-    def on_select_product(self,product):
+    def product_changed(self, product:ProductSeries):
+        products :list[ProductSeries]= self.products.get_data()
+        base_product: ProductSeries = self.productView.base_product
+        print(f"updating product {base_product} {product}\n{products}")
+        if base_product.name == "" and base_product.variant == "":
+            return
+        if base_product in products:
+            i = products.index(base_product)
+            products[i] = product
+        else:
+            products.append(product)
+        
+        #self.products.update_data(products)
+
+    def on_select_product(self,product:ProductSeries):
         #self.productView.update_data(e.control.data)
         self.selected_product = product
-        print(f"updating selected product to ", product.name)
+        #print(f"updating selected product to ", product.name)
         self.tabs.tabs[2].text = f"Product {product.name}"
         self.tabs.tabs[2].update()
         self.tabs.selected_index = 2
         self.tabs_changed(None)
         self.tabs.update()
+        self.productView.base_product=product
+        self.productView.update_data(product)
         self.update()
+
+    def update_products(self):
+        with open(repo_path+"/products.yaml","r+") as file:
+            self.products.update_data([ProductSeries.from_dict(p) for p in yaml.safe_load_all(file)])
 
     def on_catalog_changed(self, c: Catalog):
         print("catalog changed to "+c.brand)
         self.productView.variant_types = c.version_types
         self.productView.attribute_types = c.attribute_types
-        
-        with open(repo_path+"/products.yaml","r+") as file:
-            self.products.update_data([ProducSeries.from_dict(p) for p in yaml.safe_load_all(file)])
-
-    def on_product_save(self, ps: ProducSeries):
-        #ps.save(repo_path+"/products.yaml")
-        yml = ps.to_yaml()
-        print(yml)
-        print(ProducSeries.from_yaml(yml))
+        self.update_products()
 
     def tabs_changed(self, e :ft.ControlEvent):
             print("tabs changed "+str(self.tabs.selected_index))
@@ -494,7 +515,7 @@ class RepoView(ft.UserControl):
             self.update()
         
     def build(self):
-        return ft.Column([ft.ResponsiveRow([ft.Container(c,col=6,bgcolor=ft.colors.BLUE_GREY_100,border_radius=5) for c in [self.picker, self.picker_catalog]]), self.tabs, self.tabs_body])
+        return ft.Column([ft.ResponsiveRow([ft.Container(c,col=4,bgcolor=ft.colors.BLUE_GREY_100,border_radius=5) for c in [self.picker, self.picker_catalog]] +[ft.ElevatedButton("Save Data", bgcolor=ft.colors.LIGHT_GREEN_200, col=4,on_click=lambda e: self.save_data())]), self.tabs, self.tabs_body])
 
     def get_overlays(self):
         return [self.picker.get_overlay(),self.picker_catalog.get_overlay()]
@@ -502,13 +523,44 @@ class RepoView(ft.UserControl):
     def on_select_repo(self, path):
         global repo_path #TODO: should provide callback which handles this to be independent from file the class is used in
         repo_path = path
-        c = Catalog.load(repo_path+"/catalog.yaml")
-        self.cv.update_data(c)
-        self.on_catalog_changed(c)
-
+        try:
+            c = Catalog.load(repo_path+"/catalog.yaml")
+            self.cv.update_data(c)
+            self.on_catalog_changed(c)
+        except Exception as e:
+            print_exception("loading data", self.page, e)
     def on_select_catalog_file(self,file):
         self.pdf_path = file
         self.productView.pdf_path = self.pdf_path
+        self.update_products()
+
+    def save_data(self):
+        print("saving data")
+        catalog = Catalog(self.cv.brand.value, self.cv.product_type.value, self.cv.version_key.value, self.cv.versions.get_data(), self.cv.attribs.get_data())
+        products :list[ProductSeries]= self.products.get_data()
+
+        try:
+            catalog.save(repo_path+"/catalog.yaml")
+            #self.on_catalog_changed(catalog)
+
+            product_dicts = [p.to_dict() for p in products]
+            with open(repo_path+"/products.yaml","w+") as file:
+                yaml.safe_dump_all(product_dicts,file)
+            
+
+            self.page.snack_bar = ft.SnackBar(
+                bgcolor=ft.colors.LIGHT_GREEN_600,
+                content=ft.Text("Data Saved")
+                )
+            self.page.snack_bar.open = True
+            self.page.update()
+        except Exception as e:
+            self.page.snack_bar = ft.SnackBar(
+                bgcolor=ft.colors.RED,
+                content=ft.Text(f"Saving Failed:\n{e}")
+                )
+            self.page.snack_bar.open = True
+            self.page.update()
 
 class TableExtractor(ft.UserControl):
     def __init__(self, path, on_select_data = None):
@@ -541,12 +593,12 @@ class TableExtractor(ft.UserControl):
         return self.number
         
 class ProductView(DataControl):
-    def __init__(self, data: ProducSeries, variant_types: list[str],attribute_types, on_save, pdf_path=""):
-        super().__init__(data)
+    def __init__(self, data: ProductSeries, variant_types: list[str],attribute_types, pdf_path="", on_changed = None):
+        super().__init__(data, on_changed=on_changed)
+        self.base_product = data
         self.variant_types = variant_types
         self.attribute_types = attribute_types
         self.variants_data = list(data.versions.keys())
-        self.on_save = on_save    
         self.pdf_path = pdf_path
 
         
@@ -554,10 +606,10 @@ class ProductView(DataControl):
         # TODO: how to generalize this to DataControl?
         self.variants_data = d
         self.variant_entries.controls.clear()
-        data :ProducSeries = self.get_data()
+        data :ProductSeries = self.get_data()
         def store_version_attr(d: dict, key):
             print(f"got {d} {key}")
-            data :ProducSeries = self._data
+            data :ProductSeries = self._data
             data.versions[key] = d
 
         for version in self.variants_data:
@@ -573,13 +625,13 @@ class ProductView(DataControl):
             self.variant_entries.update()
 
     def store_missing_columns(self, do_update=True):
-        data :ProducSeries= self.get_data()
-        self.missing_column_names.controls = [ft.Text(name) for name in self.attribute_types if name not in data.attributes.columns]
+        data :ProductSeries= self.get_data()
+        self.missing_column_names.controls[1].controls  = [ft.Text(name) for name in self.attribute_types if name not in data.attributes.columns]
         if do_update:
             self.missing_column_names.update()
 
     def build_widget(self) -> ft.UserControl:
-        data: ProducSeries = self.get_data()
+        data: ProductSeries = self.get_data()
         self.name = ft.TextField(value=data.name, label="name",on_blur=lambda e: self.store_attr("name",e.control.value),col=4)
         self.finish = ft.TextField(value=data.variant, label="finish", on_blur=lambda e:self.store_attr("variant",e.control.value),col=4)
         self.category = ft.TextField(value=data.product_category, label="product class", on_blur=lambda e:self.store_attr("product_category",e.control.value),col=4)
@@ -594,8 +646,7 @@ class ProductView(DataControl):
         self.missing_column_names = ft.Column([ft.Text("Missing Column Names",style=ft.TextThemeStyle.LABEL_MEDIUM),ft.Row([],wrap=True)])
         self.primary_attribs = CustomDataView(data.attributes,on_changed=lambda e: self.store_missing_columns())
         self.store_missing_columns(do_update=False)
-        self.save = ft.ElevatedButton("Save", on_click=lambda _: self.on_save(self.get_data()))
-        return ft.Column([ft.Text("Product",style=ft.TextThemeStyle.HEADLINE_MEDIUM),ft.ResponsiveRow([self.name,self.category,self.finish,self.variants]), self.variant_entries, self.table_selector,self.missing_column_names,self.primary_attribs,self.save])
+        return ft.Column([ft.Text("Product",style=ft.TextThemeStyle.HEADLINE_MEDIUM),ft.ResponsiveRow([self.name,self.category,self.finish,self.variants]), self.variant_entries, self.table_selector,self.missing_column_names,self.primary_attribs])
 
         
 repo_path = None
