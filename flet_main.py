@@ -37,7 +37,8 @@ class DataControl(ft.UserControl):
         self._data = data
         if self.on_changed != None:
             self.on_changed(self.get_data())
-        self.update()
+        if self.page != None:
+            self.update()
         
     def store_attr(self,attr,value):
         """ Store attribute of data without rebuilding widget. (Necessary for storing input between external rebuild) """
@@ -260,6 +261,11 @@ class ProducSeries:
         dct["attributes"] = pd.DataFrame.from_dict(dct["attributes"])
         return ProducSeries(**dct)
     
+    def from_dict(dct: dict):
+        dct = dct.copy()
+        dct["attributes"] = pd.DataFrame.from_dict(dct["attributes"])
+        return ProducSeries(**dct)
+    
 class EditableRow(DataControl):
     
     def __init__(self, data, label=None,on_changed=None):
@@ -357,7 +363,7 @@ class RepoPicker(DataControl):
         
     def build_widget(self) -> ft.UserControl:
         data = self.get_data()
-        repo = ft.Text(data if data != None else "Not Selected")
+        repo = ft.Text(data if data != None else "Not Selected",overflow=ft.TextOverflow.ELLIPSIS,expand=True)
         return ft.Row([ft.TextButton("select directory",on_click=lambda _:self.get_directory_dialog.get_directory_path("open catalog directory")),repo])
         #self.get_directory_dialog = ft.FilePicker(on_result=self.on_pick_result)
         #self.page.overlay.append(self.get_directory_dialog)
@@ -369,6 +375,32 @@ class RepoPicker(DataControl):
             #self.repo.update()
             if e.path:
                 self.update_data(e.path)
+                if self.on_dir_picked != None:
+                    self.on_dir_picked(self.get_data())
+
+class PDFPicker(DataControl):
+    def __init__(self, data, on_file_picked=None):
+        super().__init__(data)
+        self.get_directory_dialog = ft.FilePicker(on_result=self.on_pick_result)
+        self.on_dir_picked = on_file_picked
+        
+    def get_overlay(self):
+        return self.get_directory_dialog
+        
+    def build_widget(self) -> ft.UserControl:
+        data = self.get_data()
+        repo = ft.Text(data if data != None else "Not Selected",overflow=ft.TextOverflow.ELLIPSIS,expand=True)
+        return ft.Row([ft.TextButton("select pdf",on_click=lambda _:self.get_directory_dialog.pick_files("open catalog directory",allow_multiple=False, allowed_extensions=["pdf"])),repo])
+        #self.get_directory_dialog = ft.FilePicker(on_result=self.on_pick_result)
+        #self.page.overlay.append(self.get_directory_dialog)
+        #return ft.Row([ft.TextButton("select directory",on_click=lambda _:self.get_directory_dialog.get_directory_path("open catalog directory")),repo])
+ 
+    def on_pick_result(self, e:ft.FilePickerResultEvent):
+            #self.page.overlay.remove(self.get_directory_dialog)
+            #self.repo.value = e.path if e.path else "Cancelled"
+            #self.repo.update()
+            if e.files and len(e.files) != 0:
+                self.update_data(e.files[0].path)
                 if self.on_dir_picked != None:
                     self.on_dir_picked(self.get_data())
                     
@@ -385,32 +417,98 @@ class EditStrDict(DataControl):
         
         return ft.Column(controls=[ft.Text(self.label),editrow])
             
-        
+class ProductListView(DataControl):
+
+    def __init__(self, data, on_changed=None, on_select_product = None):
+        super().__init__(data, on_changed)
+        self.on_select_product = on_select_product
+
+    def build_widget(self) -> ft.UserControl:
+        data :list[ProducSeries] = self.get_data()
+
+        return ft.Column([ft.TextButton(f"{p.name} {p.variant}", data=p, on_click=lambda e: self.on_select_product(e.control.data)) for p in data]+[ft.IconButton(icon=ft.icons.ADD,on_click=lambda _: self.on_select_product(ProducSeries("","","",dict(),pd.DataFrame())))],wrap=True)
+    
+
 class RepoView(ft.UserControl):
-    def __init__(self, on_catalog_changed = None):
+    def __init__(self):
         super().__init__()
         self.picker = RepoPicker(None,on_dir_picked=self.on_select_repo)
-        self.on_catalog_changed = on_catalog_changed
+        self.picker_catalog = PDFPicker(None,on_file_picked=self.on_select_catalog_file)
         def on_save(c: Catalog):
-             c.save(repo_path+"/catalog.yaml")
-             if self.on_catalog_changed != None:
-                 self.on_catalog_changed(c)
+            c.save(repo_path+"/catalog.yaml")
+            self.on_catalog_changed(c)
 
-        self.cv = CatalogView(Catalog(version_types=[],attribute_types=[]), on_save=on_save)
+        catalog = Catalog(version_types=[],attribute_types=[])
+        self.cv = CatalogView(catalog, on_save=on_save)
+
+        self.tabs = ft.Tabs(selected_index=0, tabs=[ft.Tab(text="Catalog"), ft.Tab("Products"), ft.Tab(text="Entries")])
+        self.tabs_body = ft.Container(self.cv)
+        self.tabs.on_change = self.tabs_changed
+
+        self.products = ProductListView([], on_select_product=self.on_select_product)
+        self.selected_product = None
+        self.pdf_path = ""
+        self.productView = ProductView(ProducSeries("","","",{},pd.DataFrame()),variant_types = catalog.version_types,attribute_types=catalog.attribute_types,on_save=self.on_product_save,pdf_path=self.pdf_path)
+    
+    def on_select_product(self,product):
+        #self.productView.update_data(e.control.data)
+        self.selected_product = product
+        print(f"updating selected product to ", product.name)
+        self.tabs.tabs[2].text = f"Product {product.name}"
+        self.tabs.tabs[2].update()
+        self.tabs.selected_index = 2
+        self.tabs_changed(None)
+        self.tabs.update()
+        self.update()
+
+    def on_catalog_changed(self, c: Catalog):
+        print("catalog changed to "+c.brand)
+        self.productView.variant_types = c.version_types
+        self.productView.attribute_types = c.attribute_types
+        
+        with open(repo_path+"/products.yaml","r+") as file:
+            self.products.update_data([ProducSeries.from_dict(p) for p in yaml.safe_load_all(file)])
+
+    def on_product_save(self, ps: ProducSeries):
+        #ps.save(repo_path+"/products.yaml")
+        yml = ps.to_yaml()
+        print(yml)
+        print(ProducSeries.from_yaml(yml))
+
+    def tabs_changed(self, e :ft.ControlEvent):
+            print("tabs changed "+str(self.tabs.selected_index))
+            if repo_path == "" or repo_path == None:
+                self.tabs.selected_index = 0
+                self.tabs.update()
+                # TODO: why does tab body get stuck when moving to other tabs before loading?
+                return
+            if self.tabs.selected_index == 0:
+                self.tabs_body.content = self.cv
+            if self.tabs.selected_index == 1:
+                self.tabs_body.content = self.products
+            if self.tabs.selected_index == 2:
+                if self.selected_product == None:
+                    self.tabs_body.content = ft.Text("Select Product first")
+                else:
+                    self.tabs_body.content = self.productView
+            self.update()
         
     def build(self):
-        return ft.Column([self.picker, self.cv])
+        return ft.Column([ft.ResponsiveRow([ft.Container(c,col=6,bgcolor=ft.colors.BLUE_GREY_100,border_radius=5) for c in [self.picker, self.picker_catalog]]), self.tabs, self.tabs_body])
 
-    def get_overlay(self):
-        return self.picker.get_overlay()
+    def get_overlays(self):
+        return [self.picker.get_overlay(),self.picker_catalog.get_overlay()]
 
     def on_select_repo(self, path):
         global repo_path #TODO: should provide callback which handles this to be independent from file the class is used in
         repo_path = path
         c = Catalog.load(repo_path+"/catalog.yaml")
         self.cv.update_data(c)
-        if self.on_catalog_changed != None:
-            self.on_catalog_changed(c)
+        self.on_catalog_changed(c)
+
+    def on_select_catalog_file(self,file):
+        self.pdf_path = file
+        self.productView.pdf_path = self.pdf_path
 
 class TableExtractor(ft.UserControl):
     def __init__(self, path, on_select_data = None):
@@ -432,7 +530,7 @@ class TableExtractor(ft.UserControl):
         dfs = tabula.read_pdf(self.path,pages=pages,pandas_options={"header":None})
         #except Exception as e:
         #    self.page.add(ft.Text(f"tabular failed with {e}"))
-        self.page.add(ft.Text(f"opening result dialog"))
+        #self.page.add(ft.Text(f"opening result dialog"))
         self.dlg = ft.AlertDialog(title=ft.Text("select table"),content=ft.Column([ft.Container(ft.TextButton(f"{df}", data=df,on_click=lambda e: self.on_choose(e.control.data)), padding=ft.padding.only(bottom=25)) for df in dfs], scroll="ALWAYS"),visible=True)
         self.page.dialog = self.dlg
         self.dlg.open = True
@@ -443,12 +541,14 @@ class TableExtractor(ft.UserControl):
         return self.number
         
 class ProductView(DataControl):
-    def __init__(self, data: ProducSeries, variant_types: list[str],attribute_types, on_save):
+    def __init__(self, data: ProducSeries, variant_types: list[str],attribute_types, on_save, pdf_path=""):
         super().__init__(data)
         self.variant_types = variant_types
         self.attribute_types = attribute_types
         self.variants_data = list(data.versions.keys())
-        self.on_save = on_save
+        self.on_save = on_save    
+        self.pdf_path = pdf_path
+
         
     def store_variants(self, d, do_update=True):
         # TODO: how to generalize this to DataControl?
@@ -487,12 +587,11 @@ class ProductView(DataControl):
         self.variant_entries = ft.Column([])
         self.store_variants(self.variants_data,do_update=False) # build entries for initial data
 
-        path = "C:/Users/Julian/Downloads/Schwalbe Katalog 2022.pdf"
         def onDF(df):
             self.primary_attribs.update_data(df)
             self.store_attr("attributes", df)
-        self.table_selector = TableExtractor(path, on_select_data=lambda df: onDF(df))
-        self.missing_column_names = ft.Row([],wrap=True)
+        self.table_selector = TableExtractor(self.pdf_path, on_select_data=lambda df: onDF(df))
+        self.missing_column_names = ft.Column([ft.Text("Missing Column Names",style=ft.TextThemeStyle.LABEL_MEDIUM),ft.Row([],wrap=True)])
         self.primary_attribs = CustomDataView(data.attributes,on_changed=lambda e: self.store_missing_columns())
         self.store_missing_columns(do_update=False)
         self.save = ft.ElevatedButton("Save", on_click=lambda _: self.on_save(self.get_data()))
@@ -514,32 +613,8 @@ def main(page: ft.Page):
     page.scroll = "ALWAYS"
 
     repoView = RepoView()
-    page.overlay.append(repoView.get_overlay())
-    catalog :Catalog = repoView.cv.get_data()
-    def on_product_save(ps: ProducSeries):
-        #ps.save(repo_path+"/products.yaml")
-        yml = ps.to_yaml()
-        print(yml)
-        print(ProducSeries.from_yaml(yml))
-
-    productView = ProductView(ProducSeries("","","",{}, pd.DataFrame()),variant_types = catalog.version_types,attribute_types=catalog.attribute_types,on_save=on_product_save)
-    def on_catalog_changed(c: Catalog):
-        productView.variant_types = c.version_types
-        productView.attribute_types = c.attribute_types
-    repoView.on_catalog_changed = on_catalog_changed 
-    tbs = ft.Tabs(selected_index=0, tabs=[ft.Tab(text="Catalog"), ft.Tab(text="Entries")])
-    tbs_body = ft.Container(repoView)
-    def tabs_changed(e :ft.ControlEvent):
-        print("tabs changed "+str(tbs.selected_index))
-        if tbs.selected_index == 0:
-            tbs_body.content = repoView
-        if tbs.selected_index == 1:
-            tbs_body.content = productView
-        page.update()
-    tbs.on_change = tabs_changed
-
-    page.add(tbs)
-    page.add(tbs_body)
+    page.overlay.extend(repoView.get_overlays())
+    page.add(repoView)
         
     page.update()
 
