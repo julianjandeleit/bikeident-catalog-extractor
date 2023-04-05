@@ -63,7 +63,8 @@ class DataControl(ft.UserControl):
         
     def update(self):
         self._build_widget()
-        super().update()
+        if self.page != None:
+            super().update()
 
 class Test2(DataControl):
     def build_widget(self) -> ft.UserControl:
@@ -337,13 +338,13 @@ class CatalogView(DataControl):
     def build_widget(self) -> ft.UserControl:
         data :Catalog = self.get_data()
         
-        self.brand = ft.TextField(value=data.brand, label="brand",on_blur=lambda _: self.store_attr("brand",self.brand.value),col=4)
-        self.product_type = ft.TextField(value=data.product_type, label="product_type",on_blur=lambda _: self.store_attr("product_type",self.product_type.value),col=4)
-        self.version_key = ft.TextField(value=data.version_key, label="version_key",on_blur=lambda _: self.store_attr("version_key",self.version_key.value),col=4)
-        self.versions = EditableRow(data.version_types,label="Version Types",on_changed=lambda d: self.store_attr("version_types",d))
-        self.attribs = EditableRow(data.attribute_types,label="Attribute Types",on_changed=lambda d: self.store_attr("attribute_types",d))
+        self.brand = ft.TextField(value=data.brand, label="Marke",on_blur=lambda _: self.store_attr("brand",self.brand.value),col=4)
+        self.product_type = ft.TextField(value=data.product_type, label="Produktsparte",on_blur=lambda _: self.store_attr("product_type",self.product_type.value),col=4)
+        self.version_key = ft.TextField(value=data.version_key, label="Charateristika Zuordnung (Spalte)",on_blur=lambda _: self.store_attr("version_key",self.version_key.value),col=4)
+        self.versions = EditableRow(data.version_types,label="Produkt Charakteristika",on_changed=lambda d: self.store_attr("version_types",d))
+        self.attribs = EditableRow(data.attribute_types,label="Produkt Eigenschaften (Tabellen Spalten)",on_changed=lambda d: self.store_attr("attribute_types",d))
         
-        return ft.Column(controls=[ft.Text("Catalog",style=ft.TextThemeStyle.HEADLINE_LARGE),ft.Text("Basis Attributes", style=ft.TextThemeStyle.HEADLINE_MEDIUM),ft.ResponsiveRow([self.brand,self.product_type, self.version_key]), self.versions, self.attribs])
+        return ft.Column(controls=[ft.Text("Produktübergreifend",style=ft.TextThemeStyle.HEADLINE_LARGE),ft.Text("Allgemeines", style=ft.TextThemeStyle.HEADLINE_MEDIUM),ft.ResponsiveRow([self.brand,self.product_type, self.version_key]), self.versions, self.attribs])
 
         
 class RepoPicker(DataControl):
@@ -358,7 +359,7 @@ class RepoPicker(DataControl):
     def build_widget(self) -> ft.UserControl:
         data = self.get_data()
         repo = ft.Text(data if data != None else "Not Selected",overflow=ft.TextOverflow.ELLIPSIS,expand=True)
-        return ft.Row([ft.TextButton("select directory",on_click=lambda _:self.get_directory_dialog.get_directory_path("open catalog directory")),repo])
+        return ft.Row([ft.TextButton("Speicherort auswählen",on_click=lambda _:self.get_directory_dialog.get_directory_path("open catalog directory")),repo])
         #self.get_directory_dialog = ft.FilePicker(on_result=self.on_pick_result)
         #self.page.overlay.append(self.get_directory_dialog)
         #return ft.Row([ft.TextButton("select directory",on_click=lambda _:self.get_directory_dialog.get_directory_path("open catalog directory")),repo])
@@ -384,7 +385,7 @@ class PDFPicker(DataControl):
     def build_widget(self) -> ft.UserControl:
         data = self.get_data()
         repo = ft.Text(data if data != None else "Not Selected",overflow=ft.TextOverflow.ELLIPSIS,expand=True)
-        return ft.Row([ft.TextButton("select pdf",on_click=lambda _:self.get_directory_dialog.pick_files("open catalog directory",allow_multiple=False, allowed_extensions=["pdf"])),repo])
+        return ft.Row([ft.TextButton("Katalog PDF",on_click=lambda _:self.get_directory_dialog.pick_files("open catalog directory",allow_multiple=False, allowed_extensions=["pdf"])),repo])
         #self.get_directory_dialog = ft.FilePicker(on_result=self.on_pick_result)
         #self.page.overlay.append(self.get_directory_dialog)
         #return ft.Row([ft.TextButton("select directory",on_click=lambda _:self.get_directory_dialog.get_directory_path("open catalog directory")),repo])
@@ -450,7 +451,7 @@ class RepoView(ft.UserControl):
         catalog = Catalog(version_types=[],attribute_types=[])
         self.cv = CatalogView(catalog)
 
-        self.tabs = ft.Tabs(selected_index=0, tabs=[ft.Tab(text="Catalog"), ft.Tab("Products"), ft.Tab(text="Entries")])
+        self.tabs = ft.Tabs(selected_index=0, tabs=[ft.Tab(text="Produktübergreifend"), ft.Tab("Produkte"), ft.Tab(text="Produkt Details")])
         self.tabs_body = ft.Container(self.cv)
         self.tabs.on_change = self.tabs_changed
 
@@ -477,7 +478,7 @@ class RepoView(ft.UserControl):
         #self.productView.update_data(e.control.data)
         self.selected_product = product
         #print(f"updating selected product to ", product.name)
-        self.tabs.tabs[2].text = f"Product {product.name}"
+        self.tabs.tabs[2].text = f"Produkt {product.name}"
         self.tabs.tabs[2].update()
         self.tabs.selected_index = 2
         self.tabs_changed(None)
@@ -515,7 +516,7 @@ class RepoView(ft.UserControl):
             self.update()
         
     def build(self):
-        return ft.Column([ft.ResponsiveRow([ft.Container(c,col=4,bgcolor=ft.colors.BLUE_GREY_100,border_radius=5) for c in [self.picker, self.picker_catalog]] +[ft.ElevatedButton("Save Data", bgcolor=ft.colors.LIGHT_GREEN_200, col=4,on_click=lambda e: self.save_data())]), self.tabs, self.tabs_body])
+        return ft.Column([ft.ResponsiveRow([ft.Container(c,col=4,bgcolor=ft.colors.BLUE_GREY_100,border_radius=5) for c in [self.picker, self.picker_catalog]] +[ft.ElevatedButton("Daten Speichern", bgcolor=ft.colors.LIGHT_GREEN_200, col=4,on_click=lambda e: self.save_data())]), self.tabs, self.tabs_body])
 
     def get_overlays(self):
         return [self.picker.get_overlay(),self.picker_catalog.get_overlay()]
@@ -632,10 +633,10 @@ class ProductView(DataControl):
 
     def build_widget(self) -> ft.UserControl:
         data: ProductSeries = self.get_data()
-        self.name = ft.TextField(value=data.name, label="name",on_blur=lambda e: self.store_attr("name",e.control.value),col=4)
-        self.finish = ft.TextField(value=data.variant, label="finish", on_blur=lambda e:self.store_attr("variant",e.control.value),col=4)
-        self.category = ft.TextField(value=data.product_category, label="product class", on_blur=lambda e:self.store_attr("product_category",e.control.value),col=4)
-        self.variants = EditableRow(self.variants_data,label="variants", on_changed=lambda d: self.store_variants(d))
+        self.name = ft.TextField(value=data.name, label="Name",on_blur=lambda e: self.store_attr("name",e.control.value),col=4)
+        self.finish = ft.TextField(value=data.variant, label="Ausführung", on_blur=lambda e:self.store_attr("variant",e.control.value),col=4)
+        self.category = ft.TextField(value=data.product_category, label="Kategorie innerhalb Sparte", on_blur=lambda e:self.store_attr("product_category",e.control.value),col=4)
+        self.variants = EditableRow(self.variants_data,label="Charakteristika Varianten", on_changed=lambda d: self.store_variants(d))
         self.variant_entries = ft.Column([])
         self.store_variants(self.variants_data,do_update=False) # build entries for initial data
 
