@@ -5,6 +5,7 @@ from dataclasses import dataclass, asdict
 import yaml
 import tabula
 from threading import Thread
+import numpy as np
 import ast
 #import uuid
 
@@ -130,40 +131,6 @@ class CustomCell(ft.UserControl):
         self.page.dialog = dlg
         dlg.open = True
         self.page.update()
-
-class EditableDataView(ft.UserControl):
-    def __init__(self, data: pd.DataFrame):
-        super().__init__()
-        #print("create")
-        self.df = data
-        self.build_rows()
-        self.test = False
-     
-    def build_rows(self):
-        rows = []
-        for r in range(self.df.shape[0]):
-            cells = []
-            for c in range(self.df.shape[1]):
-                cells.append(ft.DataCell(
-                    CustomCell(self.df.iloc[r, c], r, c, self),
-                    show_edit_icon=False,
-                    on_tap=lambda e: e.control._DataCell__content.open_dlg()
-                ))
-            row = ft.DataRow(cells=cells)
-            rows.append(row)
-        self.rows = rows
-
-    def build(self):
-        #print(f"{df.columns}")
-        self.build_rows()
-        rws = self.rows
-        if self.test:
-            rws = []
-        self.test = True
-        return ft.DataTable(
-            columns=[ft.DataColumn(ft.Text(c)) for c in df.columns],
-            rows=rws,
-        )
         
 class EditCell(DataControl):
     def __init__(self, data,on_data_changed = None, width = None):
@@ -175,7 +142,7 @@ class EditCell(DataControl):
     def build_widget(self) -> ft.UserControl:
         data, row, col = self.get_data()
         if self.isEditing:
-            return ft.TextField(value=data,filled=True,border=None,text_style=ft.TextStyle(size=15),width=self.edit_width,autofocus=True,content_padding=0,on_submit=self.on_submit)
+            return ft.TextField(value=data,filled=True,border=None,text_style=ft.TextStyle(size=15),width=self.edit_width,autofocus=True,content_padding=0,on_blur=self.on_submit,on_submit=self.on_submit)
         else:
             return ft.GestureDetector(content=ft.Text(data), on_tap=lambda e: self.focus())
         
@@ -191,7 +158,55 @@ class EditCell(DataControl):
         self.isEditing = True
         self.update_data(self.get_data())
         
+class AddRemoveView(ft.UserControl):
+    def __init__(self, label: str, on_add, on_remove,col):
+        super().__init__(col=col)
+        self.label = label
+        self.on_add = on_add
+        self.on_remove = on_remove
+        
+    def build(self):
+        self.vLabel = ft.Text(self.label)
+        self.vAdd = ft.IconButton("add",on_click=self.on_add)
+        self.vRemove = ft.IconButton("remove", on_click=self.on_remove)
+        return ft.Row(controls=[self.vLabel, self.vAdd, self.vRemove])
+        
 class CustomDataView(DataControl):
+    
+    #def __init__(data,on_changed = None):
+    #    super().__init__(data=data,on_changed=on_changed)
+        
+        
+    def on_inc_col(self, inc: int):
+        """inc should be 1 or -1"""
+        df: pd.DataFrame = self.get_data()
+        if inc == 1:
+            c_name = max([float(col) for col in df.columns if str(col).isalnum()],default=0)
+            c_name = int(c_name+1)
+            df[c_name] = np.nan
+            #print(f"on_inc_col {inc} {df.columns}")
+        if inc == -1:
+            df = df.iloc[:, :-1]
+        
+        self.update_data(df)
+        
+    def on_inc_row(self, inc: int):
+        """inc should be 1 or -1"""
+        df: pd.DataFrame = self.get_data()
+        if inc == 1:
+            df = pd.concat([df, pd.DataFrame([[np.nan]*len(df.columns)],columns=df.columns)])
+        if inc == -1:
+            df = df.iloc[:-1,:]
+        
+        self.update_data(df)
+        
+    def on_create_empty(self):
+        """creates dataframe with one cell"""
+        df: pd.DataFrame = self.get_data()
+        self.update_data(pd.DataFrame())
+        self.on_inc_col(1)
+        self.on_inc_row(1)
+    
     def build_widget(self) -> ft.UserControl:        
         data : pd.DataFrame = self.get_data()
         rows = []
@@ -204,12 +219,17 @@ class CustomDataView(DataControl):
                 ))
             row = ft.DataRow(cells=cells)
             rows.append(row)
-        return ft.Row(
+        return ft.Column(controls=[
+            ft.ResponsiveRow(controls=[
+                ft.TextButton("create Emptry",on_click=lambda _: self.on_create_empty(),col=4), 
+                AddRemoveView(label="row",on_add=lambda _: self.on_inc_row(1), on_remove=lambda _: self.on_inc_row(-1),col=4), 
+                AddRemoveView(label="column",on_add=lambda _: self.on_inc_col(1), on_remove=lambda _: self.on_inc_col(-1),col=4)]),
+            ft.Row(
             scroll="ALWAYS",
             controls=[ft.DataTable(
             columns=[ft.DataColumn(ft.Row(alignment=ft.MainAxisAlignment.START,vertical_alignment=ft.CrossAxisAlignment.START,controls=[EditCell((c, None,i),width=75,on_data_changed=self.col_changed)])) for i,c in enumerate(data.columns)],
             rows=rows,
-        )])
+        )])])
         
     def col_changed(self, _row, col, new_data):
         data = self.get_data()
@@ -234,7 +254,7 @@ class Catalog:
     attribute_types: list[str] = list # ["DIAGMETER","ETRTO","VERSION",...]
     
     def load(path):
-        print("loading "+path)
+        #print("loading "+path)
         with open(path, "r+") as file:
             c = yaml.safe_load(file)
             c = Catalog(**c)
@@ -463,7 +483,7 @@ class RepoView(ft.UserControl):
     def product_changed(self, product:ProductSeries):
         products :list[ProductSeries]= self.products.get_data()
         base_product: ProductSeries = self.productView.base_product
-        print(f"updating product {base_product} {product}\n{products}")
+        #print(f"updating product {base_product} {product}\n{products}")
         if base_product.name == "" and base_product.variant == "":
             return
         if base_product in products:
@@ -492,13 +512,13 @@ class RepoView(ft.UserControl):
             self.products.update_data([ProductSeries.from_dict(p) for p in yaml.safe_load_all(file)])
 
     def on_catalog_changed(self, c: Catalog):
-        print("catalog changed to "+c.brand)
+        #print("catalog changed to "+c.brand)
         self.productView.variant_types = c.version_types
         self.productView.attribute_types = c.attribute_types
         self.update_products()
 
     def tabs_changed(self, e :ft.ControlEvent):
-            print("tabs changed "+str(self.tabs.selected_index))
+            #print("tabs changed "+str(self.tabs.selected_index))
             if repo_path == "" or repo_path == None:
                 self.tabs.selected_index = 0
                 self.tabs.update()
@@ -536,7 +556,7 @@ class RepoView(ft.UserControl):
         self.update_products()
 
     def save_data(self):
-        print("saving data")
+        #print("saving data")
         catalog = Catalog(self.cv.brand.value, self.cv.product_type.value, self.cv.version_key.value, self.cv.versions.get_data(), self.cv.attribs.get_data())
         products :list[ProductSeries]= self.products.get_data()
 
