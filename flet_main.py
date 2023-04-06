@@ -379,7 +379,7 @@ class RepoPicker(DataControl):
     def build_widget(self) -> ft.UserControl:
         data = self.get_data()
         repo = ft.Text(data if data != None else "Not Selected",overflow=ft.TextOverflow.ELLIPSIS,expand=True)
-        return ft.Row([ft.TextButton("Speicherort auswählen",on_click=lambda _:self.get_directory_dialog.get_directory_path("open catalog directory")),repo])
+        return ft.Row([ft.TextButton("Speicherort",on_click=lambda _:self.get_directory_dialog.get_directory_path("open catalog directory")),repo])
         #self.get_directory_dialog = ft.FilePicker(on_result=self.on_pick_result)
         #self.page.overlay.append(self.get_directory_dialog)
         #return ft.Row([ft.TextButton("select directory",on_click=lambda _:self.get_directory_dialog.get_directory_path("open catalog directory")),repo])
@@ -463,6 +463,14 @@ def print_exception(msg, page, e):
             )
     page.snack_bar.open = True
     page.update()
+    
+def print_info(msg, page):
+    page.snack_bar = ft.SnackBar(
+        bgcolor=ft.colors.BLUE,
+            content=ft.Text(f"Info: {msg}")
+            )
+    page.snack_bar.open = True
+    page.update()
 
 class RepoView(ft.UserControl):
     def __init__(self):
@@ -472,6 +480,7 @@ class RepoView(ft.UserControl):
 
         catalog = Catalog(version_types=[],attribute_types=[])
         self.cv = CatalogView(catalog)
+        self.init = ft.TextButton("Speicherort als neue Datenbank initialisieren",col=12, on_click=lambda _: self.init_repo(), disabled=True)
 
         self.tabs = ft.Tabs(selected_index=0, tabs=[ft.Tab(text="Produktübergreifend"), ft.Tab("Produkte"), ft.Tab(text="Produkt Details")])
         self.tabs_body = ft.Container(self.cv)
@@ -538,10 +547,23 @@ class RepoView(ft.UserControl):
             self.update()
         
     def build(self):
-        return ft.Column([ft.ResponsiveRow([ft.Container(c,col=4,bgcolor=ft.colors.BLUE_GREY_100,border_radius=5) for c in [self.picker, self.picker_catalog]] +[ft.ElevatedButton("Daten Speichern", bgcolor=ft.colors.LIGHT_GREEN_200, col=4,on_click=lambda e: self.save_data())]), self.tabs, self.tabs_body])
+        return ft.Column([
+            ft.ResponsiveRow([
+                ft.Container(c,col=4,bgcolor=ft.colors.BLUE_GREY_100,border_radius=5) for c in [self.picker, self.picker_catalog]] + [ft.ElevatedButton("Daten Speichern", bgcolor=ft.colors.LIGHT_GREEN_200, col=4,on_click=lambda e: self.save_data()), self.init]),
+            self.tabs, self.tabs_body])
 
     def get_overlays(self):
         return [self.picker.get_overlay(),self.picker_catalog.get_overlay()]
+
+    def init_repo(self):
+        c = Catalog(brand="",product_type="",version_key="", version_types=[],attribute_types=[])
+        self.products.update_data([])
+        self.cv.update_data(c)
+        self.save_data()
+        
+        self.on_catalog_changed(c)
+        self.init.disabled = True
+        self.init.update()
 
     def on_select_repo(self, path):
         global repo_path #TODO: should provide callback which handles this to be independent from file the class is used in
@@ -550,8 +572,14 @@ class RepoView(ft.UserControl):
             c = Catalog.load(repo_path+"/catalog.yaml")
             self.cv.update_data(c)
             self.on_catalog_changed(c)
+            self.init.disabled = True
+            self.init.update()
+            print_info("catalog loaded", self.page)
         except Exception as e:
-            print_exception("loading data", self.page, e)
+            #print_exception("loading data", self.page, e)
+            print_info("Selected directory was not a Bikeident Database",self.page)
+            self.init.disabled = False
+            self.init.update()
     def on_select_catalog_file(self,file):
         self.pdf_path = file
         self.productView.pdf_path = self.pdf_path
