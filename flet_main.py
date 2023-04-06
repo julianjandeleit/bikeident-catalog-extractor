@@ -456,7 +456,7 @@ class ProductListView(DataControl):
                 ft.TextButton(f"{product.name} {product.variant}", data=product, on_click=self.select)])
         return ft.Column([get_elem(p) for p in data]+[ft.IconButton(icon=ft.icons.ADD_CIRCLE_OUTLINE,on_click=lambda _: self.on_select_product(ProductSeries("","","",dict(),pd.DataFrame()))),],wrap=True)
     
-def print_exception(msg, page, e):
+def print_exception(msg, page, e: Exception):
     page.snack_bar = ft.SnackBar(
         bgcolor=ft.colors.RED,
             content=ft.Text(f"Exception {msg}\n{e}")
@@ -644,10 +644,11 @@ Wenn Java auf dem PC noch nicht installiert ist:
         #self.page.ad.add(ft.Text(f"reading {pages}"))
         pages = ast.literal_eval(pages)
         #self.page.add(ft.Text(f"starting tabula"))
-        #try:
-        dfs = tabula.read_pdf(self.path,pages=pages,pandas_options={"header":None})
-        #except Exception as e:
-        #    self.page.add(ft.Text(f"tabular failed with {e}"))
+        try:
+            dfs = tabula.read_pdf(self.path,pages=pages,pandas_options={"header":None})
+        except Exception as e:
+            print_exception("extracting table:",self.page, e)
+            return
         #self.page.add(ft.Text(f"opening result dialog"))
         self.dlg = ft.AlertDialog(title=ft.Text("select table"),content=ft.Column([ft.Container(ft.TextButton(f"{df}", data=df,on_click=lambda e: self.on_choose(e.control.data)), padding=ft.padding.only(bottom=25)) for df in dfs], scroll="ALWAYS"),visible=True)
         self.page.dialog = self.dlg
