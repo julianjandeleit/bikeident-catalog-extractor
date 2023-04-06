@@ -405,7 +405,9 @@ class PDFPicker(DataControl):
     def build_widget(self) -> ft.UserControl:
         data = self.get_data()
         repo = ft.Text(data if data != None else "Not Selected",overflow=ft.TextOverflow.ELLIPSIS,expand=True)
-        return ft.Row([ft.TextButton("Katalog PDF",on_click=lambda _:self.get_directory_dialog.pick_files("open catalog directory",allow_multiple=False, allowed_extensions=["pdf"])),repo])
+        return ft.Row([
+            ft.TextButton("Katalog PDF",on_click=lambda _:self.get_directory_dialog.pick_files("open catalog directory",allow_multiple=False, allowed_extensions=["pdf"])),
+            repo])
         #self.get_directory_dialog = ft.FilePicker(on_result=self.on_pick_result)
         #self.page.overlay.append(self.get_directory_dialog)
         #return ft.Row([ft.TextButton("select directory",on_click=lambda _:self.get_directory_dialog.get_directory_path("open catalog directory")),repo])
@@ -588,6 +590,21 @@ class TableExtractor(ft.UserControl):
         super().__init__()
         self.path = path
         self.on_select_data = on_select_data
+        
+        self.help_text =  """
+Tabellen werden Extrahiert aus dem PDF welches oben bei `Katalog PDF` ausgewählt ist.
+Um eine Tabelle zu extrahieren, die ensprechende Seitenzahl im PDF angeben und in dem Popup die passende Tabelle auswählen.
+Bei Problemen muss das `Katalog PDF` möglicherweise ausgewählt werden bevor mit der Bearbeitung eines Produktes begonnen wird.
+ 
+Abschließend müssen die vorgegebenen Spaltennamen der Tabelle noch manuell zugeordnet und umbenannt werden.
+            
+## Das Modul um Tabellen zu Extrahieren benötigt Java
+            
+Wenn Java auf dem PC noch nicht installiert ist:
+            
+1. [Java Umgebung](https://www.java.com/de/download/manual.jsp) herunterladen und installieren (zum Beispiel Version `Windows online`).
+2. Computer neustarten (Je nach System reicht ein Neustart der App).
+"""
 
     def on_choose(self, df):
         self.dlg.open = False
@@ -608,10 +625,24 @@ class TableExtractor(ft.UserControl):
         self.page.dialog = self.dlg
         self.dlg.open = True
         self.page.update()
+        
+    def on_help(self):
+        self.dlg = ft.AlertDialog(
+            title=ft.Text("Anleitung Tabellen Extrahierer"),
+            content=ft.Markdown(
+            self.help_text,
+            selectable=True,
+            extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+            on_tap_link=lambda e: self.page.launch_url(e.data),
+        ))
+        self.page.dialog = self.dlg
+        self.dlg.open = True
+        self.page.update()
     
     def build(self):
         self.number = ft.TextField(label="Enter Page Number",tooltip="needs to be a number",hint_text="22 or [22, 23]", width=150, on_submit=lambda e: self.on_read(e.control.value))
-        return self.number
+        self.help = ft.IconButton(icon=ft.icons.HELP, on_click=lambda e: self.on_help())
+        return ft.Row([self.number,self.help])
         
 class ProductView(DataControl):
     def __init__(self, data: ProductSeries, variant_types: list[str],attribute_types, pdf_path="", on_changed = None):
