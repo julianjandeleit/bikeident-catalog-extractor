@@ -69,7 +69,7 @@ class Spreadsheet(DataControl[pd.DataFrame]):
         df: pd.DataFrame = self.get_data()
         if inc == 1:
             print(f"cols {df.columns}")
-            c_name = max([float(col) for col in df.columns if str(col).isalnum()],default=0)
+            c_name = max([float(col) for col in df.columns if str(col).isnumeric()],default=0)
             print(f"attempting {c_name}\n{df}")
             c_name = int(c_name+1)
             df.insert(pos,column=c_name,value=[np.nan for i in range(df.shape[0])])
@@ -155,7 +155,7 @@ class Spreadsheet(DataControl[pd.DataFrame]):
             #print(series)
             vName = EditCell((series.name, None,i),width=75,on_data_changed=self.col_changed)
             vCol = _buildColumn(series, i,highlight_row=self.highlight_row,on_context_click=self.on_context,on_text_changed=lambda e,f,c: self.on_text_changed(e,f,c))
-            vBody.controls.append(ft.Container(ft.Column([vName,vCol]),bgcolor="red" if self.highlight_column == i else None))
+            vBody.controls.append(ft.Container(ft.Column(controls=[vName,ft.Text("-"),vCol]),bgcolor="red" if self.highlight_column == i else None))
         
         return vBody
 

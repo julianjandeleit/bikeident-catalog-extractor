@@ -686,6 +686,7 @@ Wenn Java auf dem PC noch nicht installiert ist:
                     tc = table.extract(x_tolerance = 15)
                     df = pd.DataFrame(tc[0::])
                     df = df.replace(r'^\s*$', np.nan, regex=True)
+                    df = df.fillna(value=np.nan)
                     #df.columns = df.columns.str.replace(r'^\s*$', "nan")
                     dfs.append(df)
             #dfs = tabula.read_pdf(self.path,pages=pages,guess=True,encoding="cp1252",pandas_options={"header":None})
