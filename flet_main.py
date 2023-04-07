@@ -7,6 +7,8 @@ import tabula
 from threading import Thread
 import numpy as np
 import ast
+from spreadsheet import Spreadsheet
+import pdfplumber
 #import uuid
 
 
@@ -609,8 +611,10 @@ class RepoView(ft.UserControl):
             self.init.update()
     def on_select_catalog_file(self,file):
         self.pdf_path = file
+        print(f"pdf path {self.pdf_path}")
         self.productView.pdf_path = self.pdf_path
-        self.update_products()
+        self.productView.update()
+        #self.update_products()
 
     def save_data(self):
         #print("saving data")
@@ -670,9 +674,21 @@ Wenn Java auf dem PC noch nicht installiert ist:
     def on_read(self,pages):
         #self.page.ad.add(ft.Text(f"reading {pages}"))
         pages = ast.literal_eval(pages)
+        if not isinstance(pages, list):
+            pages = [pages]
         #self.page.add(ft.Text(f"starting tabula"))
         try:
-            dfs = tabula.read_pdf(self.path,pages=pages,pandas_options={"header":None})
+            tables = pdfplumber.open(self.path, pages=pages)
+            dfs = []
+            for page in tables.pages:
+                tables = page.find_tables(table_settings={"vertical_strategy": "lines_strict", "horizontal_strategy": "lines_strict"})
+                for table in tables:
+                    tc = table.extract(x_tolerance = 15)
+                    df = pd.DataFrame(tc[0::])
+                    df = df.replace(r'^\s*$', np.nan, regex=True)
+                    #df.columns = df.columns.str.replace(r'^\s*$', "nan")
+                    dfs.append(df)
+            #dfs = tabula.read_pdf(self.path,pages=pages,guess=True,encoding="cp1252",pandas_options={"header":None})
         except Exception as e:
             print_exception("extracting table:",self.page, e)
             return
@@ -696,7 +712,7 @@ Wenn Java auf dem PC noch nicht installiert ist:
         self.page.update()
     
     def build(self):
-        self.number = ft.TextField(label="Enter Page Number",tooltip="needs to be a number",hint_text="22 or [22, 23]", width=150, on_submit=lambda e: self.on_read(e.control.value))
+        self.number = ft.TextField(label="Tabelle aus PDF lesen",tooltip="Seitenzahl",hint_text="22 oder [22, 23]", width=150, on_submit=lambda e: self.on_read(e.control.value))
         self.help = ft.IconButton(icon=ft.icons.HELP, on_click=lambda e: self.on_help())
         return ft.Row([self.number,self.help])
         
@@ -738,6 +754,12 @@ class ProductView(DataControl):
         if do_update:
             self.missing_column_names.update()
 
+    def create_empty_table(self, e):
+        """creates dataframe with one cell"""
+        self.primary_attribs.update_data(pd.DataFrame())
+        self.primary_attribs.on_inc_col(1,0)
+        self.primary_attribs.on_inc_row(1,0)
+
     def build_widget(self) -> ft.UserControl:
         data: ProductSeries = self.get_data()
         self.name = ft.TextField(value=data.name, label="Name",on_blur=lambda e: self.store_attr("name",e.control.value),col=4)
@@ -752,9 +774,10 @@ class ProductView(DataControl):
             self.store_attr("attributes", df)
         self.table_selector = TableExtractor(self.pdf_path, on_select_data=lambda df: onDF(df))
         self.missing_column_names = ft.Column([ft.Text("Missing Column Names",style=ft.TextThemeStyle.LABEL_MEDIUM),ft.Row([],wrap=True)])
-        self.primary_attribs = CustomDataView(data.attributes,on_changed=lambda e: self.store_missing_columns())
+        self.init_df = ft.TextButton("Leere Tabelle Erstellen",on_click=self.create_empty_table)
+        self.primary_attribs = Spreadsheet(data.attributes,on_changed=lambda e: self.store_missing_columns())
         self.store_missing_columns(do_update=False)
-        return ft.Column([ft.Text("Product",style=ft.TextThemeStyle.HEADLINE_MEDIUM),ft.ResponsiveRow([self.name,self.category,self.finish,self.variants]), self.variant_entries, self.table_selector,self.missing_column_names,self.primary_attribs])
+        return ft.Column([ft.Text("Product",style=ft.TextThemeStyle.HEADLINE_MEDIUM),ft.ResponsiveRow([self.name,self.finish,self.variants]), self.variant_entries,self.missing_column_names,ft.Row([self.table_selector,self.init_df]),self.primary_attribs])
 
         
 repo_path = None
