@@ -159,17 +159,31 @@ class EditCell(DataControl):
         self.update_data(self.get_data())
         
 class AddRemoveView(ft.UserControl):
-    def __init__(self, label: str, on_add, on_remove,col):
+    def __init__(self, label: str, positions, on_add, on_remove,col, on_update=None):
+        positions = positions -1
         super().__init__(col=col)
         self.label = label
         self.on_add = on_add
         self.on_remove = on_remove
+        self.slider = ft.Slider(value=0, min=0,max=positions if positions > 0 else 1, disabled= True if positions <= 0 else False,label="{value}",on_change=self.on_slider_change,divisions=positions if positions > 1 else None)
+        self.slider_label = ft.Text("at index 0")
+        self.on_update = on_update
+        
+    def on_slider_change(self,e):
+        self.slider_label.value = "at index " +str(int(e.control.value))
+        self.slider_label.update()
+        if self.on_update:
+            self.on_update(e.control.value)
         
     def build(self):
         self.vLabel = ft.Text(self.label)
-        self.vAdd = ft.IconButton("add",on_click=self.on_add)
-        self.vRemove = ft.IconButton("remove", on_click=self.on_remove)
-        return ft.Row(controls=[self.vLabel, self.vAdd, self.vRemove])
+        self.vAdd = ft.IconButton("add",on_click=lambda _: self.on_add(int(self.slider.value)))
+        self.vRemove = ft.IconButton("remove", on_click=lambda _: self.on_remove(int(self.slider.value)))
+        return ft.Row(
+            controls=[self.vLabel, 
+                                ft.Column([
+                                    ft.Row([self.vAdd, self.vRemove]),
+                                    ft.Row([self.slider_label,self.slider])],alignment=ft.MainAxisAlignment.START,horizontal_alignment=ft.CrossAxisAlignment.START)])
         
 class CustomDataView(DataControl):
     
@@ -177,27 +191,37 @@ class CustomDataView(DataControl):
     #    super().__init__(data=data,on_changed=on_changed)
         
         
-    def on_inc_col(self, inc: int):
+    def on_inc_col(self, inc: int, pos: int):
         """inc should be 1 or -1"""
         df: pd.DataFrame = self.get_data()
         if inc == 1:
+            print(f"cols {df.columns}")
             c_name = max([float(col) for col in df.columns if str(col).isalnum()],default=0)
+            print(f"attempting {c_name}\n{df}")
             c_name = int(c_name+1)
-            df[c_name] = np.nan
-            #print(f"on_inc_col {inc} {df.columns}")
+            df.insert(pos,column=c_name,value=[np.nan for i in range(df.shape[0])])
         if inc == -1:
-            df = df.iloc[:, :-1]
-        
+            #df = df.iloc[:, :-1]
+            df = df.drop(df.columns[pos],axis=1)
+            #print(df)
+        df = df.reset_index(drop=True)
         self.update_data(df)
         
-    def on_inc_row(self, inc: int):
+    def on_inc_row(self, inc: int, pos: int):
         """inc should be 1 or -1"""
         df: pd.DataFrame = self.get_data()
         if inc == 1:
-            df = pd.concat([df, pd.DataFrame([[np.nan]*len(df.columns)],columns=df.columns)])
+            pre = df.iloc[:pos]
+            #print(f"pre {pre}")
+            new = pd.DataFrame([[np.nan]*len(df.columns)])
+            post = df.iloc[pos:]
+            #print(f"post {post}")
+            df = pd.concat([pre, new,post],ignore_index=True)
         if inc == -1:
-            df = df.iloc[:-1,:]
+            df = df.drop([pos])
         
+        df = df.reset_index(drop=True)
+        #print(df)
         self.update_data(df)
         
     def on_create_empty(self):
@@ -206,6 +230,7 @@ class CustomDataView(DataControl):
         self.update_data(pd.DataFrame())
         self.on_inc_col(1)
         self.on_inc_row(1)
+
     
     def build_widget(self) -> ft.UserControl:        
         data : pd.DataFrame = self.get_data()
@@ -222,12 +247,14 @@ class CustomDataView(DataControl):
         return ft.Column(controls=[
             ft.ResponsiveRow(controls=[
                 ft.TextButton("create Emptry",on_click=lambda _: self.on_create_empty(),col=4), 
-                AddRemoveView(label="row",on_add=lambda _: self.on_inc_row(1), on_remove=lambda _: self.on_inc_row(-1),col=4), 
-                AddRemoveView(label="column",on_add=lambda _: self.on_inc_col(1), on_remove=lambda _: self.on_inc_col(-1),col=4)]),
+                AddRemoveView(label="row",positions=data.shape[0]+1,on_add=lambda p: self.on_inc_row(1,p), on_remove=lambda p: self.on_inc_row(-1,p),col=4), 
+                AddRemoveView(label="column",positions=data.shape[1]+1,on_add=lambda p: self.on_inc_col(1,p), on_remove=lambda p: self.on_inc_col(-1,p),col=4)]),
             ft.Row(
             scroll="ALWAYS",
             controls=[ft.DataTable(
-            columns=[ft.DataColumn(ft.Row(alignment=ft.MainAxisAlignment.START,vertical_alignment=ft.CrossAxisAlignment.START,controls=[EditCell((c, None,i),width=75,on_data_changed=self.col_changed)])) for i,c in enumerate(data.columns)],
+            columns=[ft.DataColumn(
+                ft.Row(alignment=ft.MainAxisAlignment.START,vertical_alignment=ft.CrossAxisAlignment.START,controls=[
+                    EditCell((c, None,i),width=75,on_data_changed=self.col_changed)])) for i,c in enumerate(data.columns)],
             rows=rows,
         )])])
         
