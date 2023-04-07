@@ -4,8 +4,6 @@ attribute_types:
 - SIZE
 - VERSION
 - SEAL
-- E-BIKE
-- INDEX
 - COMPOUND
 - COLOUR
 - BAR
@@ -13,15 +11,14 @@ attribute_types:
 - g
 - EPI
 - LOAD
-- ART-NO
+- ART.-NO.
 - "\u20AC"
 brand: Schwalbe
 product_type: Rennradreifen
-version_key: Version
+version_key: VERSION
 version_types:
-- ROLLING
-- ROAD GRIP
-- OFF-ROAD-GRIP
-- PROTECTION
-- DURABILITY
-- SCHWALBE PROTECTION
+- Grip
+- Pannenschutz
+- Haltbarkeit
+- Souplesse
+- Rollwiderstand

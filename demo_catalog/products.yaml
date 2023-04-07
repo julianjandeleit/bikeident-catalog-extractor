@@ -1,67 +1,65 @@
 attributes:
-  0:
-    0: null
-    1: 28-406
-    2: 28-559
-  1:
-    0: SIZE
-    1: 20x1.10
-    2: 26x1.10
-  2:
-    0: VERSION
-    1: Evolution
-    2: Evolution
-  3:
-    0: SEAL
-    1: TLE
-    2: TLE
-  4:
-    0: E-BIKE
-    1: .nan
-    2: .nan
-  5:
-    0: INDEX
-    1: .nan
-    2: .nan
-  6:
-    0: COMPOUND
-    1: .nan
-    2: .nan
-  7:
-    0: COLOUR
+  ART.-NO.:
+    0: '11653951'
+    1: '11653950'
+  BAR:
+    0: 6.0-8.0
+    1: 4.0-6.5
+  COLOUR:
+    0: Black
     1: Black
-    2: Black
-  8:
-    0: BAR
-    1: 6.0-8.0
-    2: 4.0-6.5
-  9:
-    0: PSI
-    1: 85-115
-    2: 55-95
-  10:
-    0: g
-    1: '205'
-    2: '275'
-  11:
-    0: EPI
+  COMPOUND:
+    0: Addix Race
+    1: Addix Race
+  DIAMETER:
+    0: 20"
+    1: 26"
+  EPI:
+    0: '127'
     1: '127'
-    2: '127'
-  12:
-    0: LOAD
-    1: 70 kg
-    2: 75 kg
-  13:
-    0: ART.-NO.
-    1: '11653951'
-    2: '11653950'
-name: Better Name
+  ETRTO:
+    0: 28-406
+    1: 28-559
+  LOAD:
+    0: 70 kg
+    1: 75 kg
+  PSI:
+    0: 85-115
+    1: 55-95
+  SEAL:
+    0: TLE
+    1: TLE
+  SIZE:
+    0: 20x1.10
+    1: 26x1.10
+  VERSION:
+    0: Evolution
+    1: Evolution
+  g:
+    0: '205'
+    1: '275'
+  "\u20AC":
+    0: 69,90
+    1: 69,90
+name: SCHWALBE PRO ONE TLE
 product_category: ''
-variant: ''
-versions: {}
+variant: "Evolution Line, Faltreifen \u2013 HS 462"
+versions:
+  Evolution:
+    Grip: asdf
+    Haltbarkeit: ''
+    Pannenschutz: ''
+    Rollwiderstand: ''
+    Souplesse: ''
+  sd:
+    Grip: hj
+    Haltbarkeit: ''
+    Pannenschutz: ''
+    Rollwiderstand: ''
+    Souplesse: ''
 ---
 attributes: {}
-name: modify name
+name: neu
 product_category: ''
 variant: ''
 versions: {}

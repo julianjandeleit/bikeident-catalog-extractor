@@ -732,25 +732,34 @@ class ProductView(DataControl):
         self.variants_data = d
         self.variant_entries.controls.clear()
         data :ProductSeries = self.get_data()
+        #print("data", data)
         def store_version_attr(d: dict, key):
             print(f"got {d} {key}")
             data :ProductSeries = self._data
             data.versions[key] = d
-
+            self.update_data(data)
+            
+        print(f"variants data {self.variants_data} {self.variant_types}")
+        key_surplus = [k for k in data.versions.keys() if k not in self.variants_data]
+        print(f"key surplus {key_surplus}")
+        for k in key_surplus:
+            del data.versions[k]
         for version in self.variants_data:
             entries = data.versions.get(version)
+            print(f"{version} {entries}")
             if entries == None:
                 entries = dict()
                 for k in self.variant_types:
                     entries[k] = ""
-                data.versions[version] = entries
+            data.versions[version] = entries
             self.variant_entries.controls.append(EditStrDict(entries,label=version,on_changed=lambda d: store_version_attr(d,version)))
-            
         if do_update:
             self.variant_entries.update()
 
     def store_missing_columns(self, do_update=True):
         data :ProductSeries= self.get_data()
+        data.attributes = self.primary_attribs.get_data()
+        print(self.get_data().attributes)
         self.missing_column_names.controls[1].controls  = [ft.Text(name) for name in self.attribute_types if name not in data.attributes.columns]
         if do_update:
             self.missing_column_names.update()
@@ -763,6 +772,7 @@ class ProductView(DataControl):
 
     def build_widget(self) -> ft.UserControl:
         data: ProductSeries = self.get_data()
+        self.variants_data = list(data.versions.keys())
         self.name = ft.TextField(value=data.name, label="Name",on_blur=lambda e: self.store_attr("name",e.control.value),col=4)
         self.finish = ft.TextField(value=data.variant, label="Ausführung", on_blur=lambda e:self.store_attr("variant",e.control.value),col=4)
         self.category = ft.TextField(value=data.product_category, label="Kategorie innerhalb Sparte", on_blur=lambda e:self.store_attr("product_category",e.control.value),col=4)
