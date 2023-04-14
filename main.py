@@ -26,4 +26,10 @@ first.to_csv("data/table_out.csv",index=None)
 #print(pdf[1])
 #with open("output.txt", "w") as text_file:
 #    text_file.write(pdf[22])
-# %%
+# %% 
+import camelot.io as camelot
+tables = camelot.read_pdf('/home/julian/Downloads/Michelin Katalog 2022.pdf',pages="26", flavor="stream")
+#tables = camelot.read_pdf('/home/julian/Downloads/Schwalbe Katalog 2022.pdf',pages="22", flavor="stream")
+#tables = camelot.read_pdf('/home/julian/Downloads/drive-download-20230414T201203Z-001/Continental Katalog 2022.pdf',pages="16", flavor="stream")
+#tables = camelot.read_pdf('/home/julian/Downloads/drive-download-20230414T201203Z-001/Vittoria Katalog 2022.pdf',pages="13", flavor="stream")
+len(tables)

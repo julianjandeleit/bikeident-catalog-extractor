@@ -3,7 +3,6 @@ import flet as ft
 import pandas as pd
 from dataclasses import dataclass, asdict
 import yaml
-import tabula
 from threading import Thread
 import numpy as np
 import ast
