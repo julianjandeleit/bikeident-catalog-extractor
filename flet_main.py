@@ -7,7 +7,8 @@ from threading import Thread
 import numpy as np
 import ast
 from spreadsheet import Spreadsheet
-import pdfplumber
+#import pdfplumber
+import camelot.io as camelot #requires pip install camelot-py[cv] 0.9.0
 #import uuid
 
 
@@ -673,21 +674,27 @@ Wenn Java auf dem PC noch nicht installiert ist:
     def on_read(self,pages):
         #self.page.ad.add(ft.Text(f"reading {pages}"))
         pages = ast.literal_eval(pages)
-        if not isinstance(pages, list):
-            pages = [pages]
+        #if not isinstance(pages, list):
+        #    pages = [pages]
         #self.page.add(ft.Text(f"starting tabula"))
         try:
-            tables = pdfplumber.open(self.path, pages=pages)
+            #tables = pdfplumber.open(self.path, pages=pages)
+            tables = camelot.read_pdf(self.path,pages="11", flavor="stream")
             dfs = []
-            for page in tables.pages:
-                tables = page.find_tables(table_settings={"vertical_strategy": "lines_strict", "horizontal_strategy": "lines_strict"})
-                for table in tables:
-                    tc = table.extract(x_tolerance = 15)
-                    df = pd.DataFrame(tc[0::])
+            for table in tables:
+                    df = table.df
                     df = df.replace(r'^\s*$', np.nan, regex=True)
                     df = df.fillna(value=np.nan)
-                    #df.columns = df.columns.str.replace(r'^\s*$', "nan")
                     dfs.append(df)
+            #for page in tables.pages:
+            #    tables = page.find_tables(table_settings={"vertical_strategy": "lines_strict", "horizontal_strategy": "lines_strict"})
+            #    for table in tables:
+            #        tc = table.extract(x_tolerance = 15)
+            #        df = pd.DataFrame(tc[0::])
+            #        df = df.replace(r'^\s*$', np.nan, regex=True)
+            #        df = df.fillna(value=np.nan)
+            #        #df.columns = df.columns.str.replace(r'^\s*$', "nan")
+            #        dfs.append(df)
             #dfs = tabula.read_pdf(self.path,pages=pages,guess=True,encoding="cp1252",pandas_options={"header":None})
         except Exception as e:
             print_exception("extracting table:",self.page, e)

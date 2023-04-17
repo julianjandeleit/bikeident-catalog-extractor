@@ -10,3 +10,4 @@ test.*
 test_async.*
 data/
 *.spec
+demo_catalog/*
