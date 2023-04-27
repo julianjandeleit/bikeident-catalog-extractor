@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 import flet as ft
 import pandas as pd
-from dataclasses import dataclass, asdict
 import yaml
 from threading import Thread
 import numpy as np
 import ast
 from spreadsheet import Spreadsheet
+from repository import ProductSeries, Catalog
 #import pdfplumber
 import camelot.io as camelot #requires pip install camelot-py[cv] 0.9.0
 #import uuid
@@ -272,61 +272,6 @@ class CustomDataView(DataControl):
         data = self.get_data()
         data.iloc[row,col] = new_data
         self.update_data(data)
-        
-
-@dataclass
-class Catalog:
-    brand: str = "" # Schwalbe
-    product_type: str = "" # Reifen
-    version_key: str = "" # "VERSION"
-    version_types: list[str] = list # ["SCHWALBE PROTECTION", "ROLLING", "ROAD GRIP", ...]
-    attribute_types: list[str] = list # ["DIAGMETER","ETRTO","VERSION",...]
-    
-    def load(path):
-        #print("loading "+path)
-        with open(path, "r+") as file:
-            c = yaml.safe_load(file)
-            c = Catalog(**c)
-            return c
-
-    def save(self,path):
-        with open(path,"w+") as file:
-            yaml.safe_dump(asdict(self),file)
-    
-@dataclass(eq=False)
-class ProductSeries:
-    name: str = "" # SUPER MOTO-X
-    variant: str = "" # Performance Line, Drahtreifen - HS 439
-    product_category: str = "" # URBAN
-    versions: dict = dict # DD,Gr -> Rolling->3, RoadGrip->5, ..., DD, RA -> Rolling->4, RoadGrip->4, ...
-    attributes: pd.DataFrame = pd.DataFrame # ETRTO:, SIZE:, COLOR:, BAR:, PSI:, ...
-    
-    def to_yaml(self):
-        data = asdict(self)
-        data["attributes"] = data["attributes"].to_dict()
-        return yaml.safe_dump(data)
-
-    def from_yaml(yaml_str):
-        dct = yaml.safe_load(yaml_str)
-        dct["attributes"] = pd.DataFrame.from_dict(dct["attributes"])
-        return ProductSeries(**dct)
-    
-    def to_dict(self):
-        data = asdict(self)
-        data["attributes"] = data["attributes"].to_dict()
-        return data
-    
-    def __eq__(self, __value: object) -> bool:
-        if  not isinstance(__value, ProductSeries):
-            return False
-        v :ProductSeries = __value
-        return v.name == self.name and v.variant == self.variant
-    
-
-    def from_dict(dct: dict):
-        dct = dct.copy()
-        dct["attributes"] = pd.DataFrame.from_dict(dct["attributes"])
-        return ProductSeries(**dct)
     
 class EditableRow(DataControl):
     
