@@ -1,5 +1,10 @@
 flet==0.4.2
 pandas==1.5.3
 PyYAML==6.0
-tabula-py==2.7.0
-pdfplumber==0.8.0
+camelot-py[cv]==0.9.0
+pyinstaller==5.10.1
+pillow==9.5.0
+scrapy==2.8.0
+scrapyscript==1.1.5
+#tabula-py==2.7.0
+#pdfplumber==0.8.0

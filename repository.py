@@ -3,6 +3,7 @@ import pandas as pd
 from dataclasses import dataclass, asdict
 import yaml
 import pathlib
+from typing import Self
 
 @dataclass
 class Catalog:
@@ -62,7 +63,7 @@ class ProductSeries:
 @dataclass
 class Repository:
     meta: Catalog
-    entries: ProductSeries
+    entries: list[ProductSeries]
     
     def save(self, path: pathlib.Path):
         self.catalog.save(path / "catalog.yaml")
@@ -72,11 +73,10 @@ class Repository:
         with open(path / "products.yaml","w+") as file:
             yaml.safe_dump_all(product_dicts,file)
             
-    def load(self, path: pathlib.Path):
+    def load(path: pathlib.Path) -> Self:
         catalog = Catalog.load(path / "catalog.yaml")
         products = []
         with open(path / "products.yaml","r+") as file:
             products += [ProductSeries.from_dict(p) for p in yaml.safe_load_all(file)]
             
-        self.meta = catalog
-        self.entries = products
+        return Repository(catalog, products)
